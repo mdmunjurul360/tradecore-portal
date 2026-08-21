@@ -6,6 +6,8 @@ import { envValidationSchema } from './common/config/env.validation';
 import { PrismaModule } from './core/prisma/prisma.module';
 import { RedisConfigModule } from './core/redis/redis-config.module';
 import { HealthModule } from './core/health/health.module';
+import { UsersModule } from './modules/users/users.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -29,6 +31,10 @@ import { HealthModule } from './core/health/health.module';
     PrismaModule,
     RedisConfigModule,
     HealthModule,
+
+    // Feature Modules
+    UsersModule,
+    AuthModule,
   ],
   controllers: [],
   providers: [],
