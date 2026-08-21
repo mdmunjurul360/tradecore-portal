@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { envValidationSchema } from './common/config/env.validation';
 import { PrismaModule } from './core/prisma/prisma.module';
 import { RedisConfigModule } from './core/redis/redis-config.module';
+import { HealthModule } from './core/health/health.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RedisConfigModule } from './core/redis/redis-config.module';
     // Core Modules
     PrismaModule,
     RedisConfigModule,
+    HealthModule,
   ],
   controllers: [],
   providers: [],

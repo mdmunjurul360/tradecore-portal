@@ -5,7 +5,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './common/exceptions/global-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-
+import helmet from 'helmet';
+import * as compression from 'compression';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   
@@ -15,6 +16,11 @@ async function bootstrap() {
 
   // Global Prefix
   app.setGlobalPrefix('api/v1');
+
+  // Security Middleware
+  app.use(helmet());
+  app.enableCors();
+  app.use(compression());
 
   // Global Validation Pipe
   app.useGlobalPipes(
@@ -43,6 +49,9 @@ async function bootstrap() {
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
+
+  // Graceful Shutdown
+  app.enableShutdownHooks();
 
   // Start Server
   const port = process.env.PORT || 3000;
