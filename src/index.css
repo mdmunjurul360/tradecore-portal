@@ -1,0 +1,238 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-page: var(--bg-page);
+  --color-page-alt: var(--bg-page-alt);
+  --color-surface: var(--bg-surface);
+  --color-surface-hover: var(--bg-surface-hover);
+  --color-surface-alt: var(--bg-surface-alt);
+  --color-overlay: var(--bg-overlay);
+  
+  --color-border-default: var(--border-default);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-accent: var(--border-accent);
+  
+  --color-primary: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-inverse: var(--text-inverse);
+}
+
+/* ============================================================
+   SEMANTIC COLOR TOKENS
+   Light values on :root, dark values under .dark
+   All hardcoded Tailwind utilities in components reference
+   these via the custom CSS vars below.
+   ============================================================ */
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Brand / Accent — unchanged across themes */
+    --brand-accent: #22d3ee;
+    --brand-accent-hover: #06b6d4;
+    --brand-accent-glow: rgba(34, 211, 238, 0.4);
+
+    --color-success: #10b981;
+    --color-danger:  #f43f5e;
+    --color-warning: #f59e0b;
+    --color-info:    #06b6d4;
+
+    /* ── LIGHT THEME TOKENS ── */
+    /* Page background */
+    --bg-page:          #f1f5f9;
+    --bg-page-alt:      #e2e8f0;
+    /* Ambient radial glow (muted in light) */
+    --bg-glow:          radial-gradient(circle at 50% -20%, rgba(99,102,241,0.08) 0%, transparent 60%);
+
+    /* Surface / card */
+    --bg-surface:       rgba(255, 255, 255, 0.85);
+    --bg-surface-hover: rgba(255, 255, 255, 0.95);
+    --bg-surface-alt:   rgba(241, 245, 249, 0.8);
+
+    /* Overlay */
+    --bg-overlay:       rgba(255, 255, 255, 0.92);
+    --bg-modal-overlay: rgba(15, 23, 42, 0.45);
+
+    /* Border */
+    --border-default:   rgba(0, 0, 0, 0.08);
+    --border-subtle:    rgba(0, 0, 0, 0.05);
+    --border-accent:    rgba(34, 211, 238, 0.5);
+
+    /* Text */
+    --text-primary:     #0f172a;
+    --text-secondary:   #475569;
+    --text-muted:       #94a3b8;
+    --text-inverse:     #f8fafc;
+
+    /* Scrollbar */
+    --scrollbar-track:  rgba(226, 232, 240, 0.6);
+    --scrollbar-thumb:  rgba(148, 163, 184, 0.5);
+    --scrollbar-hover:  rgba(34, 211, 238, 0.6);
+
+    /* Input */
+    --input-bg:         rgba(255, 255, 255, 0.9);
+    --input-border:     rgba(0, 0, 0, 0.12);
+    --input-text:       #0f172a;
+  }
+
+  /* ── DARK THEME TOKENS ── (preserves the existing dark UI exactly) */
+  .dark {
+    --bg-page:          #020617;
+    --bg-page-alt:      #0f172a;
+    --bg-glow:          radial-gradient(circle at 50% -20%, #1e1b4b 0%, transparent 60%);
+
+    --bg-surface:       rgba(2, 6, 23, 0.4);
+    --bg-surface-hover: rgba(255, 255, 255, 0.05);
+    --bg-surface-alt:   rgba(255, 255, 255, 0.05);
+
+    --bg-overlay:       rgba(2, 6, 23, 0.95);
+    --bg-modal-overlay: rgba(2, 6, 23, 0.7);
+
+    --border-default:   rgba(255, 255, 255, 0.08);
+    --border-subtle:    rgba(255, 255, 255, 0.05);
+    --border-accent:    rgba(34, 211, 238, 0.3);
+
+    --text-primary:     #f1f5f9;
+    --text-secondary:   #cbd5e1;
+    --text-muted:       #64748b;
+    --text-inverse:     #020617;
+
+    --scrollbar-track:  rgba(2, 6, 23, 0.6);
+    --scrollbar-thumb:  rgba(51, 65, 85, 0.4);
+    --scrollbar-hover:  rgba(34, 211, 238, 0.6);
+
+    --input-bg:         rgba(255, 255, 255, 0.05);
+    --input-border:     rgba(255, 255, 255, 0.1);
+    --input-text:       #f1f5f9;
+  }
+
+  /* ── BASE BODY ── */
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg-page);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+/* ============================================================
+   AMBIENT GLOW — theme-aware
+   ============================================================ */
+.immersive-bg-glow {
+  background: var(--bg-glow);
+}
+
+/* Dark-only glows (no-op in light) */
+.glow-cyan {
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.35);
+}
+.dark .glow-cyan {
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.35);
+}
+:root:not(.dark) .glow-cyan {
+  box-shadow: 0 2px 8px rgba(34, 211, 238, 0.2);
+}
+
+.glow-cyan-subtle {
+  box-shadow: inset 0 0 10px rgba(34, 211, 238, 0.1);
+}
+
+.glow-indigo {
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.25);
+}
+
+/* ============================================================
+   SCROLLBARS
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+/* ============================================================
+   THEME-AWARE UTILITY CLASSES
+   These classes are used on page/layout elements to achieve
+   automatic theme switching without touching every component.
+   ============================================================ */
+
+/* Page shell */
+.theme-bg-page {
+  background-color: var(--bg-page);
+}
+
+/* Cards, panels, modals */
+.theme-surface {
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+}
+
+/* Overlay panels (sidebar, header, drawers) */
+.theme-overlay {
+  background: var(--bg-overlay);
+  border-color: var(--border-subtle);
+}
+
+/* Primary text */
+.theme-text {
+  color: var(--text-primary);
+}
+
+/* Secondary / muted text */
+.theme-text-muted {
+  color: var(--text-muted);
+}
+
+/* Overrides removed. Utilizing semantic classes via @theme instead. */
+
+/* ============================================================
+   TRANSITION: smooth theme switch
+   ============================================================ */
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 0.18s;
+  transition-timing-function: ease;
+}
+
+/* Exclude elements that shouldn't transition (prevents layout jank) */
+*[class*="animate-"],
+*[class*="transition-transform"],
+svg,
+img,
+video {
+  transition: none !important;
+}
+
+/* But allow color transitions on interactive elements (re-enable selectively) */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"] {
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+  transition-duration: 0.15s;
+  transition-timing-function: ease;
+}

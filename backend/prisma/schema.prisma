@@ -1,0 +1,503 @@
+// -----------------------------------------------------
+// CONFIGURATION
+// -----------------------------------------------------
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------
+// ENUMS
+// -----------------------------------------------------
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  INTERNAL_TRANSFER
+  FEE
+  REBATE
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum TradingAccountType {
+  LIVE
+  DEMO
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  STOP
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum PositionStatus {
+  OPEN
+  CLOSED
+  LIQUIDATED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// -----------------------------------------------------
+// 1. IAM & SECURITY
+// -----------------------------------------------------
+model User {
+  id               String  @id @default(uuid())
+  email            String  @unique
+  passwordHash     String
+  phone            String? @unique
+  emailVerified    Boolean @default(false)
+  phoneVerified    Boolean @default(false)
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+  status           String  @default("ACTIVE") // ACTIVE, SUSPENDED, BANNED
+
+  // Relations
+  profile         Profile?
+  roles           UserRole[]
+  sessions        Session[]
+  refreshTokens   RefreshToken[]
+  loginHistory    LoginHistory[]
+  devices         DeviceTracking[]
+  otps            OtpCode[]
+  kycDocuments    KycDocument[]
+  wallets         Wallet[]
+  tradingAccounts TradingAccount[]
+  supportTickets  SupportTicket[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  referralsMade   Referral[]       @relation("Referrer")
+  referredBy      Referral?        @relation("Referred")
+
+  // Audit
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([email])
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique // e.g., ADMIN, SUPPORT, USER
+  description String?
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  action      String  @unique // e.g., "users:read", "transactions:approve"
+  description String?
+
+  roles RolePermission[]
+
+  createdAt DateTime @default(now())
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ipAddress String?
+  userAgent String?
+  location  String?
+  isSuccess Boolean
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model DeviceTracking {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId     String   @unique
+  deviceModel  String?
+  osVersion    String?
+  appVersion   String?
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OtpCode {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code      String
+  type      String // EMAIL, SMS, APP
+  expiresAt DateTime
+  isUsed    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, code])
+}
+
+// -----------------------------------------------------
+// 2. COMPLIANCE & CRM
+// -----------------------------------------------------
+model Profile {
+  id          String    @id @default(uuid())
+  userId      String    @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName   String?
+  lastName    String?
+  dateOfBirth DateTime?
+  country     String?
+  city        String?
+  address     String?
+  postalCode  String?
+  kycStatus   KycStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KycDocument {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentType    String // PASSPORT, ID_CARD, UTILITY_BILL
+  fileId          String // Reference to FileMetadata
+  status          KycStatus @default(PENDING)
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+}
+
+// -----------------------------------------------------
+// 3. CORE FINANCE (WALLET & LEDGER)
+// -----------------------------------------------------
+model Wallet {
+  id       String  @id @default(uuid())
+  userId   String
+  user     User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  currency String  @db.Char(3) // ISO 4217, e.g., USD, EUR
+  balance  Decimal @default(0.0000) @db.Decimal(19, 4)
+  isLocked Boolean @default(false)
+
+  transactions Transaction[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([userId, currency])
+}
+
+model Transaction {
+  id         String            @id @default(uuid())
+  reference  String            @unique // Unique external/internal ref
+  walletId   String
+  wallet     Wallet            @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  type       TransactionType
+  status     TransactionStatus @default(PENDING)
+  amount     Decimal           @db.Decimal(19, 4)
+  currency   String            @db.Char(3)
+  fee        Decimal           @default(0.0000) @db.Decimal(19, 4)
+  netAmount  Decimal           @db.Decimal(19, 4)
+  providerId String? // Reference to PaymentProvider
+  metadata   Json? // Provider specific data
+
+  ledgerEntries LedgerEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([walletId, status])
+  @@index([createdAt])
+}
+
+// Immutable double-entry ledger
+model LedgerEntry {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  accountId     String // System account or User wallet ID
+  direction     String // CREDIT or DEBIT
+  amount        Decimal     @db.Decimal(19, 4)
+  currency      String      @db.Char(3)
+  description   String?
+  createdAt     DateTime    @default(now())
+
+  @@index([accountId])
+  @@index([transactionId])
+}
+
+model PaymentProvider {
+  id        String   @id @default(uuid())
+  name      String   @unique // e.g., STRIPE, PAYPAL, CRYPTO
+  isActive  Boolean  @default(true)
+  config    Json // Encrypted provider config
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// -----------------------------------------------------
+// 4. TRADING ENGINE
+// -----------------------------------------------------
+model TradingProvider {
+  id        String   @id @default(uuid())
+  name      String   @unique // e.g., MT4, MT5, CTRADER
+  isActive  Boolean  @default(true)
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TradingAccount {
+  id            String             @id @default(uuid())
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  providerId    String // E.g., MT5 Server
+  accountNumber String             @unique // The login ID on the trading server
+  type          TradingAccountType @default(LIVE)
+  currency      String             @db.Char(3)
+  balance       Decimal            @default(0.0000) @db.Decimal(19, 4)
+  equity        Decimal            @default(0.0000) @db.Decimal(19, 4)
+  margin        Decimal            @default(0.0000) @db.Decimal(19, 4)
+  freeMargin    Decimal            @default(0.0000) @db.Decimal(19, 4)
+  leverage      Int                @default(100)
+  isArchived    Boolean            @default(false)
+
+  orders    Order[]
+  positions Position[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, type])
+}
+
+model Order {
+  id               String         @id @default(uuid())
+  tradingAccountId String
+  tradingAccount   TradingAccount @relation(fields: [tradingAccountId], references: [id], onDelete: Restrict)
+  ticket           String         @unique // Trading server ticket ID
+  symbol           String
+  type             OrderType
+  side             OrderSide
+  volume           Decimal        @db.Decimal(19, 4) // Lots
+  openPrice        Decimal        @db.Decimal(19, 5)
+  stopLoss         Decimal?       @db.Decimal(19, 5)
+  takeProfit       Decimal?       @db.Decimal(19, 5)
+  status           String // PLACED, FILLED, REJECTED, CANCELLED
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tradingAccountId, status])
+}
+
+model Position {
+  id               String         @id @default(uuid())
+  tradingAccountId String
+  tradingAccount   TradingAccount @relation(fields: [tradingAccountId], references: [id], onDelete: Restrict)
+  ticket           String         @unique
+  symbol           String
+  side             OrderSide
+  volume           Decimal        @db.Decimal(19, 4)
+  openPrice        Decimal        @db.Decimal(19, 5)
+  closePrice       Decimal?       @db.Decimal(19, 5)
+  swap             Decimal        @default(0.0000) @db.Decimal(19, 4)
+  commission       Decimal        @default(0.0000) @db.Decimal(19, 4)
+  profit           Decimal        @default(0.0000) @db.Decimal(19, 4)
+  status           PositionStatus @default(OPEN)
+
+  openedAt  DateTime
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([tradingAccountId, status])
+  @@index([symbol])
+}
+
+// -----------------------------------------------------
+// 5. GROWTH & OPS (Tickets, Referrals, Logs)
+// -----------------------------------------------------
+model SupportTicket {
+  id       String       @id @default(uuid())
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subject  String
+  category String
+  status   TicketStatus @default(OPEN)
+  priority String       @default("NORMAL")
+
+  messages TicketMessage[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([userId, status])
+}
+
+model TicketMessage {
+  id         String        @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId   String // User or Admin ID
+  content    String        @db.Text
+  isInternal Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+}
+
+model Referral {
+  id           String   @id @default(uuid())
+  referrerId   String
+  referrer     User     @relation("Referrer", fields: [referrerId], references: [id], onDelete: Restrict)
+  referredId   String   @unique
+  referred     User     @relation("Referred", fields: [referredId], references: [id], onDelete: Restrict)
+  rewardAmount Decimal  @default(0.0000) @db.Decimal(19, 4)
+  status       String // PENDING, REWARDED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([referrerId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // EMAIL, PUSH, IN_APP
+  title     String
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String // e.g., "USER_UPDATE", "WALLET_WITHDRAWAL"
+  entityType String
+  entityId   String
+  oldValues  Json?
+  newValues  Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model WebhookLog {
+  id           String   @id @default(uuid())
+  provider     String // e.g., STRIPE, ONDATO
+  event        String
+  payload      Json
+  responseCode Int?
+  isProcessed  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+model JobTracking {
+  id          String    @id @default(uuid())
+  jobName     String
+  status      String // PENDING, SUCCESS, FAILED
+  error       String?   @db.Text
+  startedAt   DateTime
+  completedAt DateTime?
+}
+
+model FileMetadata {
+  id           String   @id @default(uuid())
+  bucket       String
+  path         String
+  originalName String
+  mimeType     String
+  size         Int
+  createdAt    DateTime @default(now())
+}
+
+model SystemConfig {
+  key         String   @id
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+}
