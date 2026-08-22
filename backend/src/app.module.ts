@@ -9,6 +9,8 @@ import { HealthModule } from './core/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { KycModule } from './modules/kyc/kyc.module';
+import { WalletModule } from './modules/wallet/wallet.module';
+import { TransactionModule } from './modules/transaction/transaction.module';
 
 @Module({
   imports: [
@@ -37,6 +39,8 @@ import { KycModule } from './modules/kyc/kyc.module';
     UsersModule,
     AuthModule,
     KycModule,
+    WalletModule,
+    TransactionModule,
   ],
   controllers: [],
   providers: [],
