@@ -8,6 +8,7 @@ import { RedisConfigModule } from './core/redis/redis-config.module';
 import { HealthModule } from './core/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { KycModule } from './modules/kyc/kyc.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuthModule } from './modules/auth/auth.module';
     // Feature Modules
     UsersModule,
     AuthModule,
+    KycModule,
   ],
   controllers: [],
   providers: [],

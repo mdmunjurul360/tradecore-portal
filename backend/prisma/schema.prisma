@@ -221,6 +221,7 @@ model Profile {
   city        String?
   address     String?
   postalCode  String?
+  nationalId  String?
   kycStatus   KycStatus @default(PENDING)
 
   createdAt DateTime @default(now())
