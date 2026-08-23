@@ -13,6 +13,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { TransactionModule } from './modules/transaction/transaction.module';
 import { DepositModule } from './modules/deposit/deposit.module';
 import { WithdrawalModule } from './modules/withdrawal/withdrawal.module';
+import { LedgerModule } from './modules/ledger/ledger.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { WithdrawalModule } from './modules/withdrawal/withdrawal.module';
     TransactionModule,
     DepositModule,
     WithdrawalModule,
+    LedgerModule,
   ],
   controllers: [],
   providers: [],
