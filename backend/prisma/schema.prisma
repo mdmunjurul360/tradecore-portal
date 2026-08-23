@@ -65,6 +65,13 @@ enum TicketStatus {
   CLOSED
 }
 
+enum DepositStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 // -----------------------------------------------------
 // 1. IAM & SECURITY
 // -----------------------------------------------------
@@ -89,6 +96,7 @@ model User {
   otps            OtpCode[]
   kycDocuments    KycDocument[]
   wallets         Wallet[]
+  deposits        Deposit[]
   tradingAccounts TradingAccount[]
   supportTickets  SupportTicket[]
   notifications   Notification[]
@@ -255,6 +263,7 @@ model Wallet {
   isLocked Boolean @default(false)
 
   transactions Transaction[]
+  deposits     Deposit[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -309,6 +318,24 @@ model PaymentProvider {
   config    Json // Encrypted provider config
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Deposit {
+  id            String        @id @default(uuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  walletId      String
+  wallet        Wallet        @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  amount        Decimal       @db.Decimal(19, 4)
+  currency      String        @db.Char(3)
+  paymentMethod String
+  reference     String?       @unique
+  status        DepositStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([walletId, status])
 }
 
 // -----------------------------------------------------

@@ -11,6 +11,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { KycModule } from './modules/kyc/kyc.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { TransactionModule } from './modules/transaction/transaction.module';
+import { DepositModule } from './modules/deposit/deposit.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { TransactionModule } from './modules/transaction/transaction.module';
     KycModule,
     WalletModule,
     TransactionModule,
+    DepositModule,
   ],
   controllers: [],
   providers: [],
