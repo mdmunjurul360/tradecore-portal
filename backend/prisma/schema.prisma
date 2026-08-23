@@ -72,6 +72,13 @@ enum DepositStatus {
   CANCELLED
 }
 
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 // -----------------------------------------------------
 // 1. IAM & SECURITY
 // -----------------------------------------------------
@@ -97,6 +104,7 @@ model User {
   kycDocuments    KycDocument[]
   wallets         Wallet[]
   deposits        Deposit[]
+  withdrawals     Withdrawal[]
   tradingAccounts TradingAccount[]
   supportTickets  SupportTicket[]
   notifications   Notification[]
@@ -264,6 +272,7 @@ model Wallet {
 
   transactions Transaction[]
   deposits     Deposit[]
+  withdrawals  Withdrawal[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -333,6 +342,25 @@ model Deposit {
   status        DepositStatus @default(PENDING)
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([walletId, status])
+}
+
+model Withdrawal {
+  id              String           @id @default(uuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  walletId        String
+  wallet          Wallet           @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  amount          Decimal          @db.Decimal(19, 4)
+  currency        String           @db.Char(3)
+  withdrawalMethod String
+  destination     String
+  note            String?
+  status          WithdrawalStatus @default(PENDING)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@index([userId, status])
   @@index([walletId, status])
