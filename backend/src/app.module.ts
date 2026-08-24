@@ -14,6 +14,8 @@ import { TransactionModule } from './modules/transaction/transaction.module';
 import { DepositModule } from './modules/deposit/deposit.module';
 import { WithdrawalModule } from './modules/withdrawal/withdrawal.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
+import { AdminDepositModule } from './modules/admin-deposit/admin-deposit.module';
+import { AdminWithdrawalModule } from './modules/admin-withdrawal/admin-withdrawal.module';
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { LedgerModule } from './modules/ledger/ledger.module';
     DepositModule,
     WithdrawalModule,
     LedgerModule,
+    AdminDepositModule,
+    AdminWithdrawalModule,
   ],
   controllers: [],
   providers: [],
