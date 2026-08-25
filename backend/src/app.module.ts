@@ -16,6 +16,7 @@ import { WithdrawalModule } from './modules/withdrawal/withdrawal.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { AdminDepositModule } from './modules/admin-deposit/admin-deposit.module';
 import { AdminWithdrawalModule } from './modules/admin-withdrawal/admin-withdrawal.module';
+import { AdminKycModule } from './modules/admin-kyc/admin-kyc.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { AdminWithdrawalModule } from './modules/admin-withdrawal/admin-withdraw
     LedgerModule,
     AdminDepositModule,
     AdminWithdrawalModule,
+    AdminKycModule,
   ],
   controllers: [],
   providers: [],
