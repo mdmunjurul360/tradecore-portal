@@ -1,4 +1,4 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { SubmitKycDto } from './dto/submit-kyc.dto';
 
@@ -9,6 +9,18 @@ export class KycService {
   async submitKyc(userId: string, submitKycDto: SubmitKycDto) {
     const { nationalId, dateOfBirth, country, address, documentType, documentReference } = submitKycDto;
 
+    // Validate the file reference exists in the database
+    const fileMetadata = await this.prisma.fileMetadata.findUnique({
+      where: { id: documentReference },
+    });
+
+    if (!fileMetadata) {
+      throw new BadRequestException(
+        'Invalid document reference. Please upload a document first using POST /upload/kyc.',
+      );
+    }
+
+    // Check for existing KYC submission
     const existingProfile = await this.prisma.profile.findUnique({
       where: { userId },
     });
@@ -17,40 +29,43 @@ export class KycService {
       throw new ConflictException(`KYC submission is already ${existingProfile.kycStatus}`);
     }
 
-    await this.prisma.profile.upsert({
-      where: { userId },
-      create: {
-        userId,
-        nationalId,
-        dateOfBirth: new Date(dateOfBirth),
-        country,
-        address,
-        kycStatus: 'PENDING',
-      },
-      update: {
-        nationalId,
-        dateOfBirth: new Date(dateOfBirth),
-        country,
-        address,
-        kycStatus: 'PENDING',
-      },
-    });
+    // Use a transaction to ensure atomicity
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.profile.upsert({
+        where: { userId },
+        create: {
+          userId,
+          nationalId,
+          dateOfBirth: new Date(dateOfBirth),
+          country,
+          address,
+          kycStatus: 'PENDING',
+        },
+        update: {
+          nationalId,
+          dateOfBirth: new Date(dateOfBirth),
+          country,
+          address,
+          kycStatus: 'PENDING',
+        },
+      });
 
-    const fileId = documentReference || `placeholder_${Date.now()}`;
+      const kycDocument = await tx.kycDocument.create({
+        data: {
+          userId,
+          documentType,
+          fileId: documentReference,
+          status: 'PENDING',
+        },
+      });
 
-    const kycDocument = await this.prisma.kycDocument.create({
-      data: {
-        userId,
-        documentType,
-        fileId,
-        status: 'PENDING',
-      },
+      return kycDocument;
     });
 
     return {
       message: 'KYC submitted successfully',
       kycStatus: 'PENDING',
-      documentId: kycDocument.id,
+      documentId: result.id,
     };
   }
 

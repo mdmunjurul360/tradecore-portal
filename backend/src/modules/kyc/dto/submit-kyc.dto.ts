@@ -1,5 +1,5 @@
-import { IsString, IsDateString, IsNotEmpty, IsOptional } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsDateString, IsNotEmpty } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class SubmitKycDto {
   @ApiProperty({ example: 'ID123456789' })
@@ -22,13 +22,13 @@ export class SubmitKycDto {
   @IsNotEmpty()
   address!: string;
 
-  @ApiProperty({ example: 'PASSPORT' })
+  @ApiProperty({ example: 'PASSPORT', description: 'Document type: PASSPORT, ID_CARD, UTILITY_BILL' })
   @IsString()
   @IsNotEmpty()
   documentType!: string;
 
-  @ApiPropertyOptional({ example: 'file_metadata_id_123' })
+  @ApiProperty({ example: 'uuid-file-metadata-id', description: 'File reference ID from POST /upload/kyc' })
   @IsString()
-  @IsOptional()
-  documentReference?: string;
+  @IsNotEmpty()
+  documentReference!: string;
 }

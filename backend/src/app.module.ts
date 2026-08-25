@@ -18,6 +18,7 @@ import { AdminDepositModule } from './modules/admin-deposit/admin-deposit.module
 import { AdminWithdrawalModule } from './modules/admin-withdrawal/admin-withdrawal.module';
 import { AdminKycModule } from './modules/admin-kyc/admin-kyc.module';
 import { UploadModule } from './modules/upload/upload.module';
+import { AdminUploadModule } from './modules/admin-upload/admin-upload.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { UploadModule } from './modules/upload/upload.module';
     AdminWithdrawalModule,
     AdminKycModule,
     UploadModule,
+    AdminUploadModule,
   ],
   controllers: [],
   providers: [],

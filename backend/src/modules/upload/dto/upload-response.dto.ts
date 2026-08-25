@@ -1,6 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UploadResponseDto {
+  @ApiProperty({ description: 'Generated file reference ID (use this for KYC submission)' })
+  fileId: string;
+
   @ApiProperty({ description: 'Original file name' })
   originalName: string;
 
