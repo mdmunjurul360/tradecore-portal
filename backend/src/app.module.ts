@@ -20,6 +20,7 @@ import { AdminKycModule } from './modules/admin-kyc/admin-kyc.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { AdminUploadModule } from './modules/admin-upload/admin-upload.module';
 import { NotificationModule } from './modules/notification/notification.module';
+import { WalletLedgerModule } from './modules/wallet-ledger/wallet-ledger.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { NotificationModule } from './modules/notification/notification.module';
     UploadModule,
     AdminUploadModule,
     NotificationModule,
+    WalletLedgerModule,
   ],
   controllers: [],
   providers: [],
