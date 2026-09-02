@@ -22,14 +22,17 @@ export class WalletLedgerService {
    * Executes a completely atomic financial transaction across the Wallet, Transaction, and Ledger models.
    * This guarantees that a balance is never updated without a corresponding ledger entry and transaction record.
    */
-  async executeAtomicWalletTransaction(params: ExecuteWalletTransactionParams) {
+  async executeAtomicWalletTransaction(
+    params: ExecuteWalletTransactionParams,
+    txClient?: Prisma.TransactionClient,
+  ) {
     const amountDec = new Prisma.Decimal(params.amount);
     
     if (amountDec.lte(0)) {
       throw new BadRequestException('Transaction amount must be strictly positive');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const execute = async (tx: Prisma.TransactionClient) => {
       // 1. Validate wallet state
       const wallet = await tx.wallet.findUnique({
         where: { id: params.walletId },
@@ -103,26 +106,44 @@ export class WalletLedgerService {
         ledgerEntry,
         wallet: updatedWallet,
       };
-    });
+    };
+
+    if (txClient) {
+      return execute(txClient);
+    }
+
+    return this.prisma.$transaction(execute);
   }
 
   /**
    * Helper method to securely credit a wallet.
    */
-  async creditWallet(params: Omit<ExecuteWalletTransactionParams, 'type'> & { type?: TransactionType }) {
-    return this.executeAtomicWalletTransaction({
-      ...params,
-      type: params.type || TransactionType.DEPOSIT,
-    });
+  async creditWallet(
+    params: Omit<ExecuteWalletTransactionParams, 'type'> & { type?: TransactionType },
+    txClient?: Prisma.TransactionClient,
+  ) {
+    return this.executeAtomicWalletTransaction(
+      {
+        ...params,
+        type: params.type || TransactionType.DEPOSIT,
+      },
+      txClient,
+    );
   }
 
   /**
    * Helper method to securely debit a wallet.
    */
-  async debitWallet(params: Omit<ExecuteWalletTransactionParams, 'type'> & { type?: TransactionType }) {
-    return this.executeAtomicWalletTransaction({
-      ...params,
-      type: params.type || TransactionType.WITHDRAWAL,
-    });
+  async debitWallet(
+    params: Omit<ExecuteWalletTransactionParams, 'type'> & { type?: TransactionType },
+    txClient?: Prisma.TransactionClient,
+  ) {
+    return this.executeAtomicWalletTransaction(
+      {
+        ...params,
+        type: params.type || TransactionType.WITHDRAWAL,
+      },
+      txClient,
+    );
   }
 }
