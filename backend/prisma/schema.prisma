@@ -369,6 +369,31 @@ model Withdrawal {
 // -----------------------------------------------------
 // 4. TRADING ENGINE
 // -----------------------------------------------------
+enum TradingPairStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+model TradingPair {
+  id           String            @id @default(uuid())
+  symbol       String            @unique // e.g., EURUSD, BTCUSD
+  baseAsset    String // e.g., EUR, BTC
+  quoteAsset   String // e.g., USD
+  minOrderSize Decimal           @default(0.01) @db.Decimal(19, 4)
+  maxOrderSize Decimal           @default(100.00) @db.Decimal(19, 4)
+  tickSize     Decimal           @default(0.00001) @db.Decimal(19, 5)
+  lotSize      Decimal           @default(1.00) @db.Decimal(19, 4)
+  status       TradingPairStatus @default(ACTIVE)
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([status])
+  @@index([baseAsset])
+  @@index([quoteAsset])
+}
+
 model TradingProvider {
   id        String   @id @default(uuid())
   name      String   @unique // e.g., MT4, MT5, CTRADER

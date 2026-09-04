@@ -21,6 +21,7 @@ import { UploadModule } from './modules/upload/upload.module';
 import { AdminUploadModule } from './modules/admin-upload/admin-upload.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { WalletLedgerModule } from './modules/wallet-ledger/wallet-ledger.module';
+import { TradingPairModule } from './modules/trading-pair/trading-pair.module';
 
 @Module({
   imports: [
@@ -61,6 +62,7 @@ import { WalletLedgerModule } from './modules/wallet-ledger/wallet-ledger.module
     AdminUploadModule,
     NotificationModule,
     WalletLedgerModule,
+    TradingPairModule,
   ],
   controllers: [],
   providers: [],
