@@ -146,4 +146,172 @@ export class WalletLedgerService {
       txClient,
     );
   }
+
+  /**
+   * Locks funds in a user's wallet (e.g. when placing a BUY order with fiat/quote currency).
+   * Moves amount from balance to lockedBalance atomically.
+   */
+  async lockWalletFunds(
+    params: {
+      userId: string;
+      currency: string;
+      amount: number | string | Prisma.Decimal;
+    },
+    txClient?: Prisma.TransactionClient,
+  ) {
+    const amountDec = new Prisma.Decimal(params.amount);
+    if (amountDec.lte(0)) {
+      throw new BadRequestException('Lock amount must be strictly positive');
+    }
+
+    const execute = async (tx: Prisma.TransactionClient) => {
+      const wallet = await tx.wallet.findUnique({
+        where: {
+          userId_currency: {
+            userId: params.userId,
+            currency: params.currency.toUpperCase(),
+          },
+        },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException(
+          `Wallet not found for currency ${params.currency.toUpperCase()}`,
+        );
+      }
+
+      if (wallet.isLocked) {
+        throw new BadRequestException('Wallet is currently locked for transactions');
+      }
+
+      if (wallet.balance.lt(amountDec)) {
+        throw new BadRequestException(
+          `Insufficient available balance in ${params.currency.toUpperCase()} wallet. Available: ${wallet.balance}, Required: ${amountDec}`,
+        );
+      }
+
+      return tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          balance: wallet.balance.minus(amountDec),
+          lockedBalance: wallet.lockedBalance.plus(amountDec),
+        },
+      });
+    };
+
+    if (txClient) {
+      return execute(txClient);
+    }
+
+    return this.prisma.$transaction(execute);
+  }
+
+  /**
+   * Unlocks funds in a user's wallet (e.g. when cancelling a BUY order).
+   * Moves amount from lockedBalance back to balance atomically.
+   */
+  async unlockWalletFunds(
+    params: {
+      userId: string;
+      currency: string;
+      amount: number | string | Prisma.Decimal;
+    },
+    txClient?: Prisma.TransactionClient,
+  ) {
+    const amountDec = new Prisma.Decimal(params.amount);
+    if (amountDec.lte(0)) {
+      throw new BadRequestException('Unlock amount must be strictly positive');
+    }
+
+    const execute = async (tx: Prisma.TransactionClient) => {
+      const wallet = await tx.wallet.findUnique({
+        where: {
+          userId_currency: {
+            userId: params.userId,
+            currency: params.currency.toUpperCase(),
+          },
+        },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException(
+          `Wallet not found for currency ${params.currency.toUpperCase()}`,
+        );
+      }
+
+      if (wallet.lockedBalance.lt(amountDec)) {
+        throw new BadRequestException(
+          `Cannot unlock more than currently locked. Locked: ${wallet.lockedBalance}, Requested: ${amountDec}`,
+        );
+      }
+
+      return tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          balance: wallet.balance.plus(amountDec),
+          lockedBalance: wallet.lockedBalance.minus(amountDec),
+        },
+      });
+    };
+
+    if (txClient) {
+      return execute(txClient);
+    }
+
+    return this.prisma.$transaction(execute);
+  }
+
+  /**
+   * Settles previously locked funds in a user's wallet (e.g. when a BUY order is filled).
+   * Deducts amount directly from lockedBalance without affecting available balance.
+   */
+  async settleWalletFunds(
+    params: {
+      userId: string;
+      currency: string;
+      amount: number | string | Prisma.Decimal;
+    },
+    txClient?: Prisma.TransactionClient,
+  ) {
+    const amountDec = new Prisma.Decimal(params.amount);
+    if (amountDec.lte(0)) {
+      throw new BadRequestException('Settle amount must be strictly positive');
+    }
+
+    const execute = async (tx: Prisma.TransactionClient) => {
+      const wallet = await tx.wallet.findUnique({
+        where: {
+          userId_currency: {
+            userId: params.userId,
+            currency: params.currency.toUpperCase(),
+          },
+        },
+      });
+
+      if (!wallet) {
+        throw new BadRequestException(
+          `Wallet not found for currency ${params.currency.toUpperCase()}`,
+        );
+      }
+
+      if (wallet.lockedBalance.lt(amountDec)) {
+        throw new BadRequestException(
+          `Insufficient locked balance for settlement. Locked: ${wallet.lockedBalance}, Settle: ${amountDec}`,
+        );
+      }
+
+      return tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          lockedBalance: wallet.lockedBalance.minus(amountDec),
+        },
+      });
+    };
+
+    if (txClient) {
+      return execute(txClient);
+    }
+
+    return this.prisma.$transaction(execute);
+  }
 }
