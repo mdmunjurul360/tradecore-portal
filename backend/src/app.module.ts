@@ -23,6 +23,7 @@ import { NotificationModule } from './modules/notification/notification.module';
 import { WalletLedgerModule } from './modules/wallet-ledger/wallet-ledger.module';
 import { TradingPairModule } from './modules/trading-pair/trading-pair.module';
 import { OrderModule } from './modules/order/order.module';
+import { PortfolioModule } from './modules/portfolio/portfolio.module';
 
 @Module({
   imports: [
@@ -65,6 +66,7 @@ import { OrderModule } from './modules/order/order.module';
     WalletLedgerModule,
     TradingPairModule,
     OrderModule,
+    PortfolioModule,
   ],
   controllers: [],
   providers: [],

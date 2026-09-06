@@ -107,6 +107,7 @@ model User {
   withdrawals     Withdrawal[]
   tradingAccounts TradingAccount[]
   platformOrders  PlatformOrder[]
+  holdings        PortfolioHolding[]
   supportTickets  SupportTicket[]
   notifications   Notification[]
   auditLogs       AuditLog[]
@@ -426,6 +427,24 @@ model PlatformOrder {
   @@index([userId, status])
   @@index([tradingPairId, status])
   @@index([createdAt])
+}
+
+model PortfolioHolding {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  asset           String      // e.g., 'BTC', 'EUR'
+  quantity        Decimal     @default(0.0000) @db.Decimal(19, 4)
+  lockedQuantity  Decimal     @default(0.0000) @db.Decimal(19, 4)
+  averageBuyPrice Decimal     @default(0.0000) @db.Decimal(19, 5)
+  totalCost       Decimal     @default(0.0000) @db.Decimal(19, 5)
+  realizedPnL     Decimal     @default(0.0000) @db.Decimal(19, 5)
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([userId, asset])
+  @@index([userId])
 }
 
 model TradingProvider {
