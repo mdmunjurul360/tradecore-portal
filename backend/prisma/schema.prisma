@@ -106,6 +106,7 @@ model User {
   deposits        Deposit[]
   withdrawals     Withdrawal[]
   tradingAccounts TradingAccount[]
+  platformOrders  PlatformOrder[]
   supportTickets  SupportTicket[]
   notifications   Notification[]
   auditLogs       AuditLog[]
@@ -375,6 +376,14 @@ enum TradingPairStatus {
   SUSPENDED
 }
 
+enum PlatformOrderStatus {
+  PENDING
+  FILLED
+  PARTIALLY_FILLED
+  CANCELLED
+  REJECTED
+}
+
 model TradingPair {
   id           String            @id @default(uuid())
   symbol       String            @unique // e.g., EURUSD, BTCUSD
@@ -389,9 +398,34 @@ model TradingPair {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
+  platformOrders PlatformOrder[]
+
   @@index([status])
   @@index([baseAsset])
   @@index([quoteAsset])
+}
+
+model PlatformOrder {
+  id                String              @id @default(uuid())
+  userId            String
+  user              User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tradingPairId     String
+  tradingPair       TradingPair         @relation(fields: [tradingPairId], references: [id], onDelete: Restrict)
+  side              OrderSide
+  type              OrderType
+  status            PlatformOrderStatus @default(PENDING)
+  quantity          Decimal             @db.Decimal(19, 4)
+  filledQuantity    Decimal             @default(0.0000) @db.Decimal(19, 4)
+  remainingQuantity Decimal             @db.Decimal(19, 4)
+  price             Decimal?            @db.Decimal(19, 5) // Required for LIMIT orders
+  averagePrice      Decimal?            @db.Decimal(19, 5)
+  metadata          Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([userId, status])
+  @@index([tradingPairId, status])
+  @@index([createdAt])
 }
 
 model TradingProvider {
