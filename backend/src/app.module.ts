@@ -24,6 +24,7 @@ import { WalletLedgerModule } from './modules/wallet-ledger/wallet-ledger.module
 import { TradingPairModule } from './modules/trading-pair/trading-pair.module';
 import { OrderModule } from './modules/order/order.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
+import { MatchingEngineModule } from './modules/matching-engine/matching-engine.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
     TradingPairModule,
     OrderModule,
     PortfolioModule,
+    MatchingEngineModule,
   ],
   controllers: [],
   providers: [],
