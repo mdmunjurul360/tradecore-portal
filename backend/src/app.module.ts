@@ -26,6 +26,7 @@ import { OrderModule } from './modules/order/order.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { MatchingEngineModule } from './modules/matching-engine/matching-engine.module';
 import { TradeModule } from './modules/trade/trade.module';
+import { OrderBookModule } from './modules/order-book/order-book.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { TradeModule } from './modules/trade/trade.module';
     PortfolioModule,
     MatchingEngineModule,
     TradeModule,
+    OrderBookModule,
   ],
   controllers: [],
   providers: [],
