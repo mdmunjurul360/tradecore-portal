@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
-import { MatchingEngineService } from './matching-engine.service';
 import { PrismaModule } from '../../core/prisma/prisma.module';
 import { WalletLedgerModule } from '../wallet-ledger/wallet-ledger.module';
 import { PortfolioModule } from '../portfolio/portfolio.module';
 import { NotificationModule } from '../notification/notification.module';
-import { TradeModule } from '../trade/trade.module';
+import { TradeService } from './trade.service';
+import { TradeController } from './trade.controller';
 
 @Module({
   imports: [
@@ -12,9 +12,9 @@ import { TradeModule } from '../trade/trade.module';
     WalletLedgerModule,
     PortfolioModule,
     NotificationModule,
-    TradeModule,
   ],
-  providers: [MatchingEngineService],
-  exports: [MatchingEngineService],
+  controllers: [TradeController],
+  providers: [TradeService],
+  exports: [TradeService],
 })
-export class MatchingEngineModule {}
+export class TradeModule {}

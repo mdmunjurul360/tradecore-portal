@@ -4,6 +4,7 @@ import { WalletLedgerService } from '../wallet-ledger/wallet-ledger.service';
 import { PortfolioService } from '../portfolio/portfolio.service';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/dto/create-notification.dto';
+import { TradeService } from '../trade/trade.service';
 import {
   Prisma,
   OrderSide,
@@ -51,6 +52,7 @@ export class MatchingEngineService {
     private readonly walletLedgerService: WalletLedgerService,
     private readonly portfolioService: PortfolioService,
     private readonly notificationService: NotificationService,
+    private readonly tradeService: TradeService,
   ) {}
 
   // ============================================================
@@ -300,43 +302,18 @@ export class MatchingEngineService {
     const sellOrder =
       incomingOrder.side === OrderSide.SELL ? incomingOrder : counterOrder;
 
-    // ---- Settlement: Buyer Side ----
-    // 1. Settle locked quote funds from buyer's wallet (deduct from lockedBalance)
-    await this.walletLedgerService.settleWalletFunds(
+    // Execute atomic trade settlement via TradeService
+    const trade = await this.tradeService.executeTradeSettlement(
       {
-        userId: buyOrder.userId,
-        currency: tradingPair.quoteAsset,
-        amount: quoteCost,
-      },
-      tx,
-    );
-
-    // 2. Credit base asset to buyer's portfolio (upsert holding)
-    await this.upsertPortfolioHolding(
-      tx,
-      buyOrder.userId,
-      tradingPair.baseAsset,
-      executionQty,
-      executionPrice,
-    );
-
-    // ---- Settlement: Seller Side ----
-    // 3. Settle locked base asset from seller's portfolio
-    await this.portfolioService.settleAsset(
-      {
-        userId: sellOrder.userId,
-        asset: tradingPair.baseAsset,
+        buyerOrderId: buyOrder.id,
+        sellerOrderId: sellOrder.id,
+        buyerId: buyOrder.userId,
+        sellerId: sellOrder.userId,
+        tradingPairId: tradingPair.id,
         quantity: executionQty,
+        price: executionPrice,
       },
       tx,
-    );
-
-    // 4. Credit quote funds to seller's wallet (add to available balance)
-    await this.creditSellerWallet(
-      tx,
-      sellOrder.userId,
-      tradingPair.quoteAsset,
-      quoteCost,
     );
 
     // ---- Update Counter Order ----
@@ -370,11 +347,11 @@ export class MatchingEngineService {
     });
 
     this.logger.log(
-      `Fill executed: ${tradeId} | ${tradingPair.symbol} | Qty: ${executionQty} @ ${executionPrice} | Buyer: ${buyOrder.userId} | Seller: ${sellOrder.userId}`,
+      `Fill executed: ${trade.id} | ${tradingPair.symbol} | Qty: ${executionQty} @ ${executionPrice} | Buyer: ${buyOrder.userId} | Seller: ${sellOrder.userId}`,
     );
 
     return {
-      matchedTradeId: tradeId,
+      matchedTradeId: trade.id,
       buyOrderId: buyOrder.id,
       sellOrderId: sellOrder.id,
       tradingPairId: tradingPair.id,
@@ -383,102 +360,6 @@ export class MatchingEngineService {
       buyerUserId: buyOrder.userId,
       sellerUserId: sellOrder.userId,
     };
-  }
-
-  // ============================================================
-  // Portfolio Upsert (Buyer receives base asset)
-  // ============================================================
-
-  /**
-   * Credits the buyer's portfolio with the purchased base asset.
-   * Upserts the PortfolioHolding record, updating average buy price and total cost.
-   */
-  private async upsertPortfolioHolding(
-    tx: Prisma.TransactionClient,
-    userId: string,
-    asset: string,
-    quantity: Prisma.Decimal,
-    price: Prisma.Decimal,
-  ): Promise<void> {
-    const normalizedAsset = asset.toUpperCase();
-    const cost = price.mul(quantity);
-
-    const existing = await tx.portfolioHolding.findUnique({
-      where: {
-        userId_asset: {
-          userId,
-          asset: normalizedAsset,
-        },
-      },
-    });
-
-    if (existing) {
-      const newQuantity = existing.quantity.plus(quantity);
-      const newTotalCost = existing.totalCost.plus(cost);
-      const newAvgPrice = newQuantity.gt(0)
-        ? newTotalCost.div(newQuantity)
-        : new Prisma.Decimal(0);
-
-      await tx.portfolioHolding.update({
-        where: { id: existing.id },
-        data: {
-          quantity: newQuantity,
-          totalCost: newTotalCost,
-          averageBuyPrice: newAvgPrice,
-        },
-      });
-    } else {
-      await tx.portfolioHolding.create({
-        data: {
-          userId,
-          asset: normalizedAsset,
-          quantity,
-          lockedQuantity: new Prisma.Decimal(0),
-          averageBuyPrice: price,
-          totalCost: cost,
-          realizedPnL: new Prisma.Decimal(0),
-        },
-      });
-    }
-  }
-
-  // ============================================================
-  // Seller Wallet Credit (Seller receives quote funds)
-  // ============================================================
-
-  /**
-   * Credits the seller's wallet with the proceeds from the sale.
-   * Adds the quote amount directly to the seller's available balance.
-   */
-  private async creditSellerWallet(
-    tx: Prisma.TransactionClient,
-    userId: string,
-    currency: string,
-    amount: Prisma.Decimal,
-  ): Promise<void> {
-    const normalizedCurrency = currency.toUpperCase();
-
-    const wallet = await tx.wallet.findUnique({
-      where: {
-        userId_currency: {
-          userId,
-          currency: normalizedCurrency,
-        },
-      },
-    });
-
-    if (!wallet) {
-      throw new BadRequestException(
-        `Wallet not found for seller ${userId} in currency ${normalizedCurrency}`,
-      );
-    }
-
-    await tx.wallet.update({
-      where: { id: wallet.id },
-      data: {
-        balance: wallet.balance.plus(amount),
-      },
-    });
   }
 
   // ============================================================

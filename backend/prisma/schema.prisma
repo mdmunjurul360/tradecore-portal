@@ -79,6 +79,12 @@ enum WithdrawalStatus {
   CANCELLED
 }
 
+enum TradeStatus {
+  SETTLED
+  FAILED
+  CANCELLED
+}
+
 // -----------------------------------------------------
 // 1. IAM & SECURITY
 // -----------------------------------------------------
@@ -107,6 +113,8 @@ model User {
   withdrawals     Withdrawal[]
   tradingAccounts TradingAccount[]
   platformOrders  PlatformOrder[]
+  buyerTrades     Trade[]          @relation("BuyerUser")
+  sellerTrades    Trade[]          @relation("SellerUser")
   holdings        PortfolioHolding[]
   supportTickets  SupportTicket[]
   notifications   Notification[]
@@ -401,6 +409,7 @@ model TradingPair {
   updatedAt    DateTime          @updatedAt
 
   platformOrders PlatformOrder[]
+  trades         Trade[]
 
   @@index([status])
   @@index([baseAsset])
@@ -425,6 +434,9 @@ model PlatformOrder {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
+  buyTrades  Trade[] @relation("BuyerOrder")
+  sellTrades Trade[] @relation("SellerOrder")
+
   @@index([userId, status])
   @@index([tradingPairId, status])
   @@index([createdAt])
@@ -446,6 +458,36 @@ model PortfolioHolding {
 
   @@unique([userId, asset])
   @@index([userId])
+}
+
+model Trade {
+  id            String      @id @default(uuid())
+  buyerOrderId  String
+  buyerOrder    PlatformOrder @relation("BuyerOrder", fields: [buyerOrderId], references: [id], onDelete: Restrict)
+  sellerOrderId String
+  sellerOrder   PlatformOrder @relation("SellerOrder", fields: [sellerOrderId], references: [id], onDelete: Restrict)
+  buyerId       String
+  buyer         User        @relation("BuyerUser", fields: [buyerId], references: [id], onDelete: Restrict)
+  sellerId      String
+  seller        User        @relation("SellerUser", fields: [sellerId], references: [id], onDelete: Restrict)
+  tradingPairId String
+  tradingPair   TradingPair @relation(fields: [tradingPairId], references: [id], onDelete: Restrict)
+
+  quantity      Decimal     @db.Decimal(19, 4)
+  price         Decimal     @db.Decimal(19, 5)
+  total         Decimal     @db.Decimal(19, 5)
+  status        TradeStatus @default(SETTLED)
+  executionTime DateTime    @default(now())
+  metadata      Json?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([buyerId, createdAt])
+  @@index([sellerId, createdAt])
+  @@index([tradingPairId, createdAt])
+  @@index([buyerOrderId])
+  @@index([sellerOrderId])
 }
 
 model TradingProvider {

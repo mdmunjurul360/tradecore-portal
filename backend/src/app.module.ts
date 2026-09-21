@@ -25,6 +25,7 @@ import { TradingPairModule } from './modules/trading-pair/trading-pair.module';
 import { OrderModule } from './modules/order/order.module';
 import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { MatchingEngineModule } from './modules/matching-engine/matching-engine.module';
+import { TradeModule } from './modules/trade/trade.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { MatchingEngineModule } from './modules/matching-engine/matching-engine.
     OrderModule,
     PortfolioModule,
     MatchingEngineModule,
+    TradeModule,
   ],
   controllers: [],
   providers: [],
