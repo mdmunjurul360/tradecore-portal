@@ -80,5 +80,21 @@ export const marketService = {
 
   getKlines: async (symbol: string, interval: string = '15m', limit: number = 100) => {
     return getProvider(symbol).getKlines(symbol, interval, limit);
+  },
+
+  getInstrumentDetails: (symbol: string) => {
+    const coin = SUPPORTED_COINS.find(c => c.symbol === symbol) || { type: 'Forex' };
+    const isCrypto = coin.type === 'Crypto';
+    const isIndex = ['US30', 'NAS100', 'SPX500', 'GER40', 'UK100'].includes(symbol);
+    const isCommodity = ['UKOIL', 'USOIL', 'NGAS'].includes(symbol);
+    
+    return {
+      contractSize: isCrypto ? '1 Coin' : isIndex ? '10 Index Points' : isCommodity ? '100 Barrels' : '100,000 Units',
+      minLot: isCrypto ? '0.01' : '0.01',
+      maxLot: isCrypto ? '100' : '1000',
+      leverage: isCrypto ? '1:50' : isIndex ? '1:200' : '1:2000',
+      spread: isCrypto ? 'Dynamic' : 'Floating from 0.0 pips',
+      tradingHours: isCrypto ? '24/7' : 'Mon 00:00 - Fri 23:55 (Server Time)'
+    };
   }
 };

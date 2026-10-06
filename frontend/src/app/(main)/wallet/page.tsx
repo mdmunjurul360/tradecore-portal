@@ -436,7 +436,7 @@ function ActiveAccountBanner({ acc, verb }: { acc: TradingAccountDto | null; ver
 
 function CreateAccountDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (a: TradingAccountDto) => void }) {
   const [type, setType] = useState<'LIVE' | 'DEMO'>('LIVE');
-  const [accountClass, setAccountClass] = useState<'STANDARD' | 'PRO'>('STANDARD');
+  const [accountClass, setAccountClass] = useState<'STANDARD' | 'PRO' | 'RAW'>('STANDARD');
   const [leverage, setLeverage] = useState(2000);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
@@ -460,11 +460,11 @@ function CreateAccountDialog({ open, onOpenChange, onCreated }: { open: boolean;
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {(['STANDARD', 'PRO'] as const).map((c) => (
+          <div className="grid grid-cols-3 gap-2">
+            {(['STANDARD', 'PRO', 'RAW'] as const).map((c) => (
               <button key={c} id={`create-class-${c}`} onClick={() => setAccountClass(c)} className={`p-3 rounded-md border text-left ${accountClass === c ? 'border-yellow-500 bg-yellow-500/10' : 'hover:bg-muted'}`}>
-                <p className="text-sm font-semibold">{c === 'PRO' ? 'Pro' : 'Standard'}</p>
-                <p className="text-xs text-muted-foreground">{c === 'PRO' ? 'Spreads from 0.1, no commission' : 'Spreads from 0.2, no commission'}</p>
+                <p className="text-sm font-semibold">{c === 'PRO' ? 'Pro' : c === 'RAW' ? 'Raw' : 'Standard'}</p>
+                <p className="text-xs text-muted-foreground">{c === 'PRO' ? 'Spreads from 0.1, no commission' : c === 'RAW' ? 'Raw spreads from 0.0, commission applies' : 'Spreads from 0.2, no commission'}</p>
               </button>
             ))}
           </div>
@@ -476,7 +476,7 @@ function CreateAccountDialog({ open, onOpenChange, onCreated }: { open: boolean;
           </div>
           <div className="space-y-2">
             <Label htmlFor="create-name">Account nickname (optional)</Label>
-            <Input id="create-name" value={name} maxLength={40} placeholder={`${accountClass === 'PRO' ? 'Pro' : 'Standard'} ${type === 'DEMO' ? 'Demo' : 'Real'}`} onChange={(e) => setName(e.target.value)} />
+            <Input id="create-name" value={name} maxLength={40} placeholder={`${accountClass === 'PRO' ? 'Pro' : accountClass === 'RAW' ? 'Raw' : 'Standard'} ${type === 'DEMO' ? 'Demo' : 'Real'}`} onChange={(e) => setName(e.target.value)} />
           </div>
           <p className="text-xs text-muted-foreground">
             {type === 'DEMO' ? 'Demo accounts start with 10,000.00 USD virtual funds.' : 'Real accounts start at 0.00 USD. Fund via Deposit or Internal Transfer.'}
@@ -526,7 +526,7 @@ function DetailsDialog({ acc, onClose }: { acc: TradingAccountDto | null; onClos
     ? [
         ['Account number', acc.accountNumber],
         ['Nickname', acc.name],
-        ['Type', `${acc.accountClass === 'PRO' ? 'Pro' : 'Standard'} ${acc.type === 'DEMO' ? 'Demo' : 'Real'}`],
+        ['Type', `${acc.accountClass === 'PRO' ? 'Pro' : acc.accountClass === 'RAW' ? 'Raw' : 'Standard'} ${acc.type === 'DEMO' ? 'Demo' : 'Real'}`],
         ['Platform', 'MetaTrader 5'],
         ['Server', acc.server],
         ['Currency', acc.currency],

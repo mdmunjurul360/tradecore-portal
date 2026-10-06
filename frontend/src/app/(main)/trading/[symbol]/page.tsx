@@ -4,6 +4,7 @@ import { useState, use, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { orderService } from '@/services/order.service';
 import { marketService } from '@/services/market.service';
+import { accountsService } from '@/services/accounts.service';
 import { useTradingSocket } from '@/hooks/useTradingSocket';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -68,6 +69,12 @@ export default function TradingPage() {
     }
   }, [userOrderUpdate, refetchOpenOrders, refetchOrderHistory]);
 
+  const { data: accounts = [] } = useQuery({
+    queryKey: ['trading-accounts'],
+    queryFn: accountsService.list,
+  });
+  const currentAccount = accounts.find((a) => a.isCurrent) || null;
+
   if (!isMounted) {
     return (
       <div className="flex flex-col h-[calc(100vh-6rem)] max-w-[1600px] mx-auto space-y-2 animate-pulse p-4">
@@ -85,6 +92,28 @@ export default function TradingPage() {
   const openPositionsList = allOpen.filter((o: any) => o.metadata?.isPosition === true);
   const pendingOrdersList = allOpen.filter((o: any) => o.metadata?.isPosition !== true);
   const historyOrdersList = Array.isArray(orderHistory) ? orderHistory : [];
+
+  const floatingPnL = openPositionsList.reduce((acc: number, o: any) => {
+    const openPrice = parseFloat(o.price || '0');
+    const volume = parseFloat(o.quantity || '0');
+    if (openPrice > 0 && currentPrice > 0) {
+      const profit = o.side === 'BUY' ? (currentPrice - openPrice) * volume * 100000 : (openPrice - currentPrice) * volume * 100000;
+      return acc + profit;
+    }
+    return acc;
+  }, 0);
+
+  const handleCloseAll = async () => {
+    if (!confirm('Are you sure you want to close all open positions for this symbol?')) return;
+    try {
+      await Promise.all(openPositionsList.map((o: any) => orderService.cancelOrder(o.id, currentPrice)));
+      alert('All positions closed!');
+      refetchOpenOrders();
+      refetchOrderHistory();
+    } catch (err: any) {
+      alert('Failed to close some positions.');
+    }
+  };
 
   const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -403,11 +432,38 @@ export default function TradingPage() {
                     <TabsTrigger value="pending" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Pending Orders</TabsTrigger>
                     <TabsTrigger value="history" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Order History</TabsTrigger>
                     <TabsTrigger value="trades" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Trade History</TabsTrigger>
+                    <TabsTrigger value="info" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Instrument Info</TabsTrigger>
                   </TabsList>
                 </div>
                 
                 <div className="flex-1 overflow-auto">
-            <TabsContent value="open" className="m-0 h-full">
+            <TabsContent value="open" className="m-0 flex flex-col h-full">
+              <div className="flex items-center justify-between p-2 border-b bg-muted/10 shrink-0">
+                <div className="flex items-center gap-4 text-sm">
+                  {currentAccount && (
+                    <>
+                      <div>
+                        <span className="text-muted-foreground">Balance:</span> <span className="font-medium">${Number(currentAccount.balance).toFixed(2)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Floating P/L:</span>{' '}
+                        <span className={`font-bold ${floatingPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {floatingPnL >= 0 ? '+' : ''}{floatingPnL.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="hidden sm:block">
+                        <span className="text-muted-foreground">Margin Level:</span> <span className="font-medium">{currentAccount.marginLevel !== null ? `${currentAccount.marginLevel.toFixed(2)}%` : '—'}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {openPositionsList.length > 0 && (
+                  <Button variant="destructive" size="sm" className="h-7 text-xs px-3" onClick={handleCloseAll}>
+                    Close All {symbol}
+                  </Button>
+                )}
+              </div>
+              <div className="flex-1 overflow-auto">
               {openPositionsList.length === 0 ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground text-sm">No open positions</div>
               ) : (
@@ -456,6 +512,7 @@ export default function TradingPage() {
                   </TableBody>
                 </Table>
               )}
+              </div>
             </TabsContent>
 
             <TabsContent value="pending" className="m-0 h-full">
@@ -558,6 +615,35 @@ export default function TradingPage() {
                     )}
                   </TableBody>
                 </Table>
+            </TabsContent>
+            
+            <TabsContent value="info" className="m-0 h-full p-6 overflow-auto">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-8 text-sm">
+                <div>
+                  <div className="text-muted-foreground mb-1">Contract Size</div>
+                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).contractSize}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Min Lot Size</div>
+                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).minLot}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Max Lot Size</div>
+                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).maxLot}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Max Leverage</div>
+                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).leverage}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Typical Spread</div>
+                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).spread}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground mb-1">Trading Hours</div>
+                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).tradingHours}</div>
+                </div>
+              </div>
             </TabsContent>
           </div>
         </Tabs>

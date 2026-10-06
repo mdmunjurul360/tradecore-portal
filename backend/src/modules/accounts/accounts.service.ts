@@ -19,7 +19,7 @@ import { PrismaService } from '../../core/prisma/prisma.service';
 const PROVIDER_ID = 'TRADECORE';
 const DEMO_START_BALANCE = 10000;
 
-type AccountClass = 'STANDARD' | 'PRO';
+type AccountClass = 'STANDARD' | 'PRO' | 'RAW';
 
 @Injectable()
 export class AccountsService {
@@ -197,7 +197,7 @@ export class AccountsService {
     return {
       id: acc.id,
       accountNumber: acc.accountNumber,
-      name: acc.name || `${acc.accountClass === 'PRO' ? 'Pro' : 'Standard'} ${acc.type === 'DEMO' ? 'Demo' : 'Real'}`,
+      name: acc.name || `${acc.accountClass === 'PRO' ? 'Pro' : acc.accountClass === 'RAW' ? 'Raw' : 'Standard'} ${acc.type === 'DEMO' ? 'Demo' : 'Real'}`,
       type: acc.type,
       accountClass: acc.accountClass,
       server: acc.server,
@@ -252,7 +252,7 @@ export class AccountsService {
   ) {
     await this.ensureDefaults(userId);
     const type: TradingAccountType = dto.type === 'DEMO' ? 'DEMO' : 'LIVE';
-    const accountClass: AccountClass = dto.accountClass === 'PRO' ? 'PRO' : 'STANDARD';
+    const accountClass: AccountClass = dto.accountClass === 'PRO' ? 'PRO' : dto.accountClass === 'RAW' ? 'RAW' : 'STANDARD';
     const allowedLeverage = [50, 100, 200, 500, 1000, 2000];
     const leverage = allowedLeverage.includes(Number(dto.leverage)) ? Number(dto.leverage) : 2000;
     const count = await this.prisma.tradingAccount.count({ where: { userId, deletedAt: null } });
@@ -268,7 +268,7 @@ export class AccountsService {
           currency: 'USD',
           leverage,
           accountClass,
-          name: dto.name?.trim().slice(0, 40) || `${accountClass === 'PRO' ? 'Pro' : 'Standard'} ${type === 'DEMO' ? 'Demo' : 'Real'}`,
+          name: dto.name?.trim().slice(0, 40) || `${accountClass === 'PRO' ? 'Pro' : accountClass === 'RAW' ? 'Raw' : 'Standard'} ${type === 'DEMO' ? 'Demo' : 'Real'}`,
           server: this.defaultServer(type),
           balance: type === 'DEMO' ? DEMO_START_BALANCE : 0,
           equity: type === 'DEMO' ? DEMO_START_BALANCE : 0,

@@ -5,7 +5,7 @@ export interface TradingAccountDto {
   accountNumber: string;
   name: string;
   type: 'DEMO' | 'LIVE';
-  accountClass: 'STANDARD' | 'PRO';
+  accountClass: 'STANDARD' | 'PRO' | 'RAW';
   server: string;
   currency: string;
   leverage: number;
@@ -29,7 +29,7 @@ export const accountsService = {
     const res = unwrap<TradingAccountDto[]>(data);
     return Array.isArray(res) ? res : [];
   },
-  create: async (body: { type: 'DEMO' | 'LIVE'; accountClass: 'STANDARD' | 'PRO'; leverage: number; name?: string }) => {
+  create: async (body: { type: 'DEMO' | 'LIVE'; accountClass: 'STANDARD' | 'PRO' | 'RAW'; leverage: number; name?: string }) => {
     const { data } = await api.post('/accounts', body);
     return unwrap<TradingAccountDto>(data);
   },
