@@ -9,34 +9,44 @@ import { GetTradeFilterDto } from './dto/get-trade-filter.dto';
 
 @ApiTags('trades')
 @Controller('trades')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
 export class TradeController {
   constructor(private readonly tradeService: TradeService) {}
 
   @Get()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get current user trade execution history' })
   async getUserTrades(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: any,
     @Query() filterDto: GetTradeFilterDto,
   ) {
-    return this.tradeService.findAll(userId, filterDto);
+    return this.tradeService.findAll(user.id, filterDto, user.demoModeEnabled);
   }
 
   @Get('admin/all')
-  @UseGuards(RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Get all platform trade executions (Admin only)' })
   async getAdminTrades(@Query() filterDto: GetTradeFilterDto) {
     return this.tradeService.findAdminAll(filterDto);
   }
 
+  @Get('public/:pair')
+  @ApiOperation({ summary: 'Get public trade history for a pair' })
+  async getPublicTrades(@Param('pair') pair: string) {
+    return this.tradeService.getPublicTrades(pair);
+  }
+
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get trade details by ID' })
   async getTradeDetails(
-    @CurrentUser('id') userId: string,
+    @CurrentUser() user: any,
     @Param('id') id: string,
   ) {
-    return this.tradeService.findOne(id, userId);
+    return this.tradeService.findOne(id, user.id, user.demoModeEnabled);
   }
 }
+

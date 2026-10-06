@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -27,28 +28,41 @@ export class OrderController {
   @Post()
   @ApiOperation({ summary: 'Place a new order' })
   async create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
-    return this.orderService.create(user.id, dto);
+    return this.orderService.create(user.id, dto, user.demoModeEnabled);
+  }
+
+  @Get('open')
+  @ApiOperation({ summary: 'Get all open orders for the current user' })
+  async getOpenOrders(@CurrentUser() user: User, @Query('pair') pair?: string) {
+    return this.orderService.getOpenOrders(user.id, pair, user.demoModeEnabled);
+  }
+
+  @Get('history')
+  @ApiOperation({ summary: 'Get order history for the current user' })
+  async getOrderHistory(@CurrentUser() user: User, @Query('pair') pair?: string) {
+    return this.orderService.getOrderHistory(user.id, pair, user.demoModeEnabled);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all user orders' })
   async findAll(@CurrentUser() user: User, @Query() filterDto: GetOrderFilterDto) {
-    return this.orderService.findAll(user.id, filterDto);
+    return this.orderService.findAll(user.id, filterDto, user.demoModeEnabled);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific order by ID' })
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
-    return this.orderService.findOne(user.id, id);
+    return this.orderService.findOne(user.id, id, user.demoModeEnabled);
   }
 
-  @Patch(':id/cancel')
+  @Delete(':id')
   @ApiOperation({ summary: 'Cancel a pending or partially filled order' })
-  async cancel(
+  async cancelOrder(
     @CurrentUser() user: User,
     @Param('id') id: string,
-    @Body() cancelDto: CancelOrderDto,
+    @Query('currentPrice') currentPrice?: string,
   ) {
-    return this.orderService.cancel(user.id, id);
+    return this.orderService.cancel(user.id, id, user.demoModeEnabled, currentPrice ? parseFloat(currentPrice) : undefined);
   }
 }
+

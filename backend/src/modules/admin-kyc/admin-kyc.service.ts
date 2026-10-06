@@ -93,13 +93,27 @@ export class AdminKycService {
     return this.prisma.$transaction(async (tx) => {
       const updatedDoc = await tx.kycDocument.update({
         where: { id },
-        data: { status: 'APPROVED' },
+        data: { 
+          status: 'APPROVED',
+          adminNotes: reviewDto.adminNotes,
+        },
       });
 
       // Update user profile kycStatus
       await tx.profile.update({
         where: { userId: document.userId },
         data: { kycStatus: 'APPROVED' },
+      });
+
+      await tx.notification.create({
+        data: {
+          userId: document.userId,
+          type: 'IN_APP',
+          title: 'KYC Approved',
+          message: 'Your identity verification documents have been approved. You now have full access.',
+          metadata: JSON.stringify({ documentId: document.id }),
+          isRead: false,
+        }
       });
 
       return updatedDoc;
@@ -127,6 +141,7 @@ export class AdminKycService {
         data: { 
           status: 'REJECTED',
           rejectionReason: reviewDto.reason,
+          adminNotes: reviewDto.adminNotes,
         },
       });
 
@@ -136,7 +151,33 @@ export class AdminKycService {
         data: { kycStatus: 'REJECTED' },
       });
 
+      await tx.notification.create({
+        data: {
+          userId: document.userId,
+          type: 'IN_APP',
+          title: 'KYC Rejected',
+          message: `Your identity verification was rejected. Reason: ${reviewDto.reason}`,
+          metadata: JSON.stringify({ documentId: document.id }),
+          isRead: false,
+        }
+      });
+
       return updatedDoc;
+    });
+  }
+
+  async addNote(id: string, notes: string) {
+    const document = await this.prisma.kycDocument.findUnique({
+      where: { id },
+    });
+
+    if (!document) {
+      throw new NotFoundException(`KYC document with ID ${id} not found`);
+    }
+
+    return this.prisma.kycDocument.update({
+      where: { id },
+      data: { adminNotes: notes },
     });
   }
 }

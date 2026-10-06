@@ -15,11 +15,13 @@ export interface NavItem {
 export const MAIN_NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: 'LayoutDashboard' },
   { id: 'accounts', label: 'My Accounts', path: '/accounts', icon: 'WalletCards', badge: 'Active' },
+  { id: 'trading', label: 'Trading', path: '/trading', icon: 'CandlestickChart', badge: 'Live' },
   { id: 'deposit', label: 'Deposit', path: '/deposit', icon: 'ArrowDownToLine' },
   { id: 'withdrawal', label: 'Withdrawal', path: '/withdraw', icon: 'ArrowUpFromLine' },
   { id: 'transfer', label: 'Transfer', path: '/transfer', icon: 'ArrowLeftRight' },
   { id: 'transactions', label: 'Transactions', path: '/transactions', icon: 'ReceiptText' },
-  { id: 'wallet', label: 'Crypto Wallet', path: '/wallet', icon: 'Coins', badge: 'Hot', featureFlag: 'cryptoWallet' },
+  { id: 'exchange-wallet', label: 'Exchange Wallet', path: '/exchange-wallet', icon: 'Vault', badge: 'New' },
+  { id: 'wallet', label: 'Crypto Wallet', path: '/wallet', icon: 'Coins', featureFlag: 'cryptoWallet' },
   { id: 'orders', label: 'Order History', path: '/orders', icon: 'ClockHistory' },
   { id: 'performance', label: 'Performance', path: '/performance', icon: 'LineChart', featureFlag: 'performanceAnalytics' },
   { id: 'analytics', label: 'Market Analytics', path: '/analytics', icon: 'BarChart2', featureFlag: 'economicCalendar' },
@@ -36,6 +38,13 @@ export const QUICK_APPS = [
     description: 'High-speed browser charting & order execution',
     icon: 'CandlestickChart',
     type: 'internal_terminal',
+  },
+  {
+    id: 'spot-trading',
+    name: 'Spot Trading',
+    description: 'Live spot market with real-time order book',
+    icon: 'TrendingUp',
+    path: '/trading',
   },
   {
     id: 'mt5',
@@ -64,6 +73,13 @@ export const QUICK_APPS = [
     description: 'Calculate position size, swap, and margin',
     icon: 'Calculator',
     path: '/analytics?tab=calculator',
+  },
+  {
+    id: 'exchange-wallet',
+    name: 'Exchange Wallet',
+    description: 'Deposit, withdraw & manage crypto assets',
+    icon: 'Vault',
+    path: '/exchange-wallet',
   },
   {
     id: 'vps',

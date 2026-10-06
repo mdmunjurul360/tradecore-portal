@@ -29,6 +29,8 @@ import { PerformancePage } from './pages/performance/PerformancePage';
 import { ReferralsPage } from './pages/referrals/ReferralsPage';
 import { SupportPage } from './pages/support/SupportPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
+import { TradingPage } from './pages/trading/TradingPage';
+import { ExchangeWalletPage } from './pages/exchange-wallet/ExchangeWalletPage';
 
 export default function App() {
   return (
@@ -57,10 +59,14 @@ export default function App() {
                     <Route path="wallet" element={<WalletPage />} />
 
                     {/* Trading & Performance */}
+                    <Route path="trading" element={<TradingPage />} />
                     <Route path="orders" element={<OrdersPage />} />
                     <Route path="performance" element={<PerformancePage />} />
                     <Route path="analytics" element={<AnalyticsPage />} />
                     <Route path="copy-trading" element={<CopyTradingPage />} />
+
+                    {/* Exchange Wallet */}
+                    <Route path="exchange-wallet" element={<ExchangeWalletPage />} />
 
                     {/* Support, Referrals & Settings */}
                     <Route path="referrals" element={<ReferralsPage />} />

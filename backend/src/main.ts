@@ -14,8 +14,8 @@ async function bootstrap() {
   const logger = app.get(Logger);
   app.useLogger(logger);
 
-  // Global Prefix
-  app.setGlobalPrefix('api/v1');
+  // Global Prefix (root '/' is intentionally excluded)
+  app.setGlobalPrefix('api/v1', { exclude: ['/'] });
 
   // Security Middleware
   app.use(helmet());

@@ -33,13 +33,35 @@ export class WalletLedgerService {
     }
 
     const execute = async (tx: Prisma.TransactionClient) => {
-      // 1. Validate wallet state
-      const wallet = await tx.wallet.findUnique({
+      // 1. Fetch wallet to determine user ID
+      const initialWallet = await tx.wallet.findUnique({
         where: { id: params.walletId },
       });
 
-      if (!wallet) {
+      if (!initialWallet) {
         throw new BadRequestException('Wallet not found');
+      }
+
+      // Check if it's demo or real by looking up the user
+      const user = await tx.user.findUnique({ where: { id: initialWallet.userId } });
+      const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
+      // Refetch with strict type checking if needed, but since we already have the wallet, we just check its type
+      if (initialWallet.type !== expectedType) {
+        // Find the correct wallet for the user's current mode
+        const correctWallet = await tx.wallet.findUnique({
+          where: {
+            userId_currency_type: {
+              userId: initialWallet.userId,
+              currency: params.currency,
+              type: expectedType
+            }
+          }
+        });
+        if (!correctWallet) throw new BadRequestException(`No ${expectedType} wallet found for ${params.currency}`);
+        var wallet = correctWallet;
+      } else {
+        var wallet = initialWallet;
       }
 
       if (wallet.isLocked) {
@@ -165,14 +187,30 @@ export class WalletLedgerService {
     }
 
     const execute = async (tx: Prisma.TransactionClient) => {
-      const wallet = await tx.wallet.findUnique({
+      const user = await tx.user.findUnique({ where: { id: params.userId } });
+      const walletType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
+      let wallet = await tx.wallet.findUnique({
         where: {
-          userId_currency: {
+          userId_currency_type: {
             userId: params.userId,
             currency: params.currency.toUpperCase(),
+            type: walletType,
           },
         },
       });
+
+      if (!wallet && walletType === 'DEMO') {
+        wallet = await tx.wallet.create({
+          data: {
+            userId: params.userId,
+            currency: params.currency.toUpperCase(),
+            type: 'DEMO',
+            balance: params.currency.toUpperCase() === 'USD' || params.currency.toUpperCase() === 'USDT' ? 10000 : 0,
+            lockedBalance: 0,
+          }
+        });
+      }
 
       if (!wallet) {
         throw new BadRequestException(
@@ -224,11 +262,15 @@ export class WalletLedgerService {
     }
 
     const execute = async (tx: Prisma.TransactionClient) => {
+      const user = await tx.user.findUnique({ where: { id: params.userId } });
+      const walletType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
       const wallet = await tx.wallet.findUnique({
         where: {
-          userId_currency: {
+          userId_currency_type: {
             userId: params.userId,
             currency: params.currency.toUpperCase(),
+            type: walletType,
           },
         },
       });
@@ -279,11 +321,15 @@ export class WalletLedgerService {
     }
 
     const execute = async (tx: Prisma.TransactionClient) => {
+      const user = await tx.user.findUnique({ where: { id: params.userId } });
+      const walletType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
       const wallet = await tx.wallet.findUnique({
         where: {
-          userId_currency: {
+          userId_currency_type: {
             userId: params.userId,
             currency: params.currency.toUpperCase(),
+            type: walletType,
           },
         },
       });

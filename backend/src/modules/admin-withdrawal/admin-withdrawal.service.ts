@@ -96,9 +96,9 @@ export class AdminWithdrawalService {
       throw new BadRequestException('Wallet owner mismatch.');
     }
 
-    // 3. Validate sufficient wallet balance.
-    if (withdrawal.wallet.balance.lt(withdrawal.amount)) {
-      throw new BadRequestException('Insufficient wallet balance to approve this withdrawal.');
+    // 3. Validate sufficient locked balance.
+    if (withdrawal.wallet.lockedBalance.lt(withdrawal.amount)) {
+      throw new BadRequestException('Insufficient locked balance to approve this withdrawal.');
     }
 
     // 4. Execute everything inside ONE Prisma transaction.
@@ -109,24 +109,35 @@ export class AdminWithdrawalService {
         data: { status: 'APPROVED' },
       });
 
-      // 5. Debit the wallet using WalletLedgerService.debitWallet().
-      // (6 and 7 are done inside debitWallet)
-      await this.walletLedger.debitWallet(
+      // 5. Settle the locked funds
+      await this.walletLedger.settleWalletFunds(
         {
-          walletId: withdrawal.walletId,
-          amount: withdrawal.amount,
+          userId: withdrawal.userId,
           currency: withdrawal.currency,
-          type: TransactionType.WITHDRAWAL,
-          reference: `WD-${withdrawal.id}`,
-          description: 'Withdrawal approved',
-          metadata: { 
-            withdrawalId: withdrawal.id, 
-            withdrawalMethod: withdrawal.withdrawalMethod,
-            destination: withdrawal.destination 
-          },
+          amount: withdrawal.amount,
         },
         tx,
       );
+
+      // 6. Update Transaction record to COMPLETED
+      const transaction = await tx.transaction.update({
+        where: { reference: `WD-${withdrawal.id}` },
+        data: {
+          status: 'COMPLETED',
+        },
+      });
+
+      // 7. Create Ledger Entry
+      await tx.ledgerEntry.create({
+        data: {
+          transactionId: transaction.id,
+          accountId: withdrawal.walletId,
+          direction: 'DEBIT',
+          amount: withdrawal.amount,
+          currency: withdrawal.currency,
+          description: 'Withdrawal approved',
+        },
+      });
 
       // 9. Create an in-app notification.
       await this.notificationService.createNotification(withdrawal.userId, {
@@ -159,6 +170,22 @@ export class AdminWithdrawalService {
       const updatedWithdrawal = await tx.withdrawal.update({
         where: { id },
         data: { status: 'REJECTED' },
+      });
+
+      // Unlock funds back to balance
+      await this.walletLedger.unlockWalletFunds(
+        {
+          userId: withdrawal.userId,
+          currency: withdrawal.currency,
+          amount: withdrawal.amount,
+        },
+        tx,
+      );
+
+      // Update Transaction status to FAILED
+      await tx.transaction.update({
+        where: { reference: `WD-${withdrawal.id}` },
+        data: { status: 'FAILED' },
       });
 
       await this.notificationService.createNotification(withdrawal.userId, {

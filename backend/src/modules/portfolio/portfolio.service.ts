@@ -12,8 +12,12 @@ export class PortfolioService {
     const { asset, search, page = 1, limit = 10 } = filterDto;
     const skip = (page - 1) * limit;
 
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
     const where: Prisma.PortfolioHoldingWhereInput = {
       userId,
+      type: expectedType,
       ...(asset && { asset: asset.toUpperCase() }),
       ...(search && {
         asset: { contains: search.toUpperCase(), mode: 'insensitive' as const },
@@ -42,8 +46,11 @@ export class PortfolioService {
   }
 
   async getSummary(userId: string): Promise<PortfolioSummaryDto> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
     const holdings = await this.prisma.portfolioHolding.findMany({
-      where: { userId },
+      where: { userId, type: expectedType },
     });
 
     let totalValue = 0;
@@ -77,11 +84,15 @@ export class PortfolioService {
   }
 
   async findByAsset(userId: string, asset: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
     const holding = await this.prisma.portfolioHolding.findUnique({
       where: {
-        userId_asset: {
+        userId_asset_type: {
           userId,
           asset: asset.toUpperCase(),
+          type: expectedType,
         },
       },
     });
@@ -111,11 +122,15 @@ export class PortfolioService {
     }
 
     const execute = async (tx: Prisma.TransactionClient) => {
+      const user = await tx.user.findUnique({ where: { id: params.userId } });
+      const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
       const holding = await tx.portfolioHolding.findUnique({
         where: {
-          userId_asset: {
+          userId_asset_type: {
             userId: params.userId,
             asset: params.asset.toUpperCase(),
+            type: expectedType,
           },
         },
       });
@@ -166,11 +181,15 @@ export class PortfolioService {
     }
 
     const execute = async (tx: Prisma.TransactionClient) => {
+      const user = await tx.user.findUnique({ where: { id: params.userId } });
+      const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
       const holding = await tx.portfolioHolding.findUnique({
         where: {
-          userId_asset: {
+          userId_asset_type: {
             userId: params.userId,
             asset: params.asset.toUpperCase(),
+            type: expectedType,
           },
         },
       });
@@ -221,11 +240,15 @@ export class PortfolioService {
     }
 
     const execute = async (tx: Prisma.TransactionClient) => {
+      const user = await tx.user.findUnique({ where: { id: params.userId } });
+      const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
       const holding = await tx.portfolioHolding.findUnique({
         where: {
-          userId_asset: {
+          userId_asset_type: {
             userId: params.userId,
             asset: params.asset.toUpperCase(),
+            type: expectedType,
           },
         },
       });

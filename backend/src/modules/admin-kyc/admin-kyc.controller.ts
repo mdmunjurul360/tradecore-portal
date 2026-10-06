@@ -44,4 +44,13 @@ export class AdminKycController {
   ) {
     return this.adminKycService.reject(id, reviewDto);
   }
+
+  @Patch(':id/notes')
+  @ApiOperation({ summary: 'Admin: Add notes to a KYC document' })
+  async addNote(
+    @Param('id') id: string,
+    @Body() reviewDto: AdminReviewKycDto,
+  ) {
+    return this.adminKycService.addNote(id, reviewDto.adminNotes || '');
+  }
 }

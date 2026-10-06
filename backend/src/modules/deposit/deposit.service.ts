@@ -1,20 +1,28 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { BlockchainService } from '../blockchain/blockchain.service';
 import { CreateDepositDto } from './dto/create-deposit.dto';
 import { GetDepositsFilterDto } from './dto/get-deposits-filter.dto';
 
 @Injectable()
 export class DepositService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly blockchainService: BlockchainService
+  ) {}
 
   async createDeposit(userId: string, createDepositDto: CreateDepositDto) {
     const { amount, currency, paymentMethod, reference } = createDepositDto;
 
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
     const wallet = await this.prisma.wallet.findUnique({
       where: {
-        userId_currency: {
+        userId_currency_type: {
           userId,
           currency,
+          type: expectedType,
         },
       },
     });
@@ -93,5 +101,38 @@ export class DepositService {
     }
 
     return deposit;
+  }
+
+  async getDepositAddress(userId: string, currency: string, networkId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
+    let wallet = await this.prisma.wallet.findUnique({
+      where: { userId_currency_type: { userId, currency, type: expectedType } },
+    });
+
+    if (!wallet) {
+      wallet = await this.prisma.wallet.create({
+        data: { userId, currency, type: expectedType, balance: 0, lockedBalance: 0 },
+      });
+    }
+
+    let walletAddress = await this.prisma.walletAddress.findUnique({
+      where: { userId_networkId: { userId, networkId } },
+    });
+
+    if (!walletAddress) {
+      const { address, privateKeyEncrypted } = await this.blockchainService.generateWallet(networkId);
+      walletAddress = await this.prisma.walletAddress.create({
+        data: {
+          userId,
+          networkId,
+          address,
+          privateKeyEncrypted,
+        },
+      });
+    }
+
+    return { address: walletAddress.address, currency, networkId };
   }
 }

@@ -6,4 +6,9 @@ export class AdminReviewKycDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @ApiPropertyOptional({ example: 'Internal notes about user verification' })
+  @IsOptional()
+  @IsString()
+  adminNotes?: string;
 }

@@ -1,12 +1,16 @@
 import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { PrismaService } from '../../../core/prisma/prisma.service';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private prisma: PrismaService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -15,10 +19,19 @@ export class RolesGuard implements CanActivate {
       return true;
     }
     const { user } = context.switchToHttp().getRequest();
-    // Assuming user roles are joined or we fetch it. 
-    // This is a placeholder since UserRole is complex in Prisma. 
-    // In this basic version, we allow if user object exists but doesn't strictly check the join table.
-    // In production, we'd include user.roles from DB in JwtStrategy and check here.
-    return user && user.roles?.some((role: any) => requiredRoles.includes(role.role.name)) || true; // Simplified for now.
+    if (!user) return false;
+
+    // Fetch roles from database
+    const userRoles = await this.prisma.userRole.findMany({
+      where: { userId: user.id },
+      include: { role: true },
+    });
+
+    const roleNames = userRoles.map(ur => ur.role.name);
+    
+    // SUPER_ADMIN has access to everything
+    if (roleNames.includes('SUPER_ADMIN')) return true;
+
+    return requiredRoles.some(role => roleNames.includes(role));
   }
 }

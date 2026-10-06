@@ -14,11 +14,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = await this.usersService.findById(payload.sub);
-    if (!user) {
-      throw new UnauthorizedException();
+    console.log('JWT Payload:', payload);
+    try {
+      const user = await this.usersService.findById(payload.sub);
+      console.log('Found user:', user?.id);
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+      return user;
+    } catch (err) {
+      console.error('JWT Validate Error:', err);
+      throw new UnauthorizedException('Validate failed');
     }
-    // In a real app we might join user roles here, but for simplicity we return user
-    return user;
   }
 }

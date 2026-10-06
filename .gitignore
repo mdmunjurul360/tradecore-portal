@@ -6,3 +6,11 @@ coverage/
 *.log
 .env*
 !.env.example
+
+.next/
+test_*.js
+seed_*.js
+verify_db.js
+check_*.js
+fix_*.js
+*.log

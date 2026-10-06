@@ -19,12 +19,12 @@ export class TransactionController {
     @CurrentUser() user: User,
     @Query() filterDto: GetTransactionsFilterDto,
   ) {
-    return this.transactionService.findAll(user.id, filterDto);
+    return this.transactionService.findAll(user.id, filterDto, user.demoModeEnabled);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a specific transaction by ID' })
   async findOne(@CurrentUser() user: User, @Param('id') id: string) {
-    return this.transactionService.findOne(user.id, id);
+    return this.transactionService.findOne(user.id, id, user.demoModeEnabled);
   }
 }

@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { AppController } from './app.controller';
 import { ConfigModule } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
 import { BullModule } from '@nestjs/bullmq';
@@ -27,6 +30,15 @@ import { PortfolioModule } from './modules/portfolio/portfolio.module';
 import { MatchingEngineModule } from './modules/matching-engine/matching-engine.module';
 import { TradeModule } from './modules/trade/trade.module';
 import { OrderBookModule } from './modules/order-book/order-book.module';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
+import { ReferralModule } from './modules/referral/referral.module';
+import { SessionModule } from './modules/session/session.module';
+import { BlockchainModule } from './modules/blockchain/blockchain.module';
+import { WorkersModule } from './modules/workers/workers.module';
+import { WebsocketsModule } from './modules/websockets/websockets.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
+
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -36,6 +48,7 @@ import { OrderBookModule } from './modules/order-book/order-book.module';
       validate: (env) => envValidationSchema.parse(env),
     }),
     
+    ScheduleModule.forRoot(),
     // Logging Module
     LoggerModule.forRoot({
       pinoHttp: {
@@ -73,8 +86,24 @@ import { OrderBookModule } from './modules/order-book/order-book.module';
     MatchingEngineModule,
     TradeModule,
     OrderBookModule,
+    ApiKeysModule,
+    ReferralModule,
+    SessionModule,
+    BlockchainModule,
+    WorkersModule,
+    WebsocketsModule,
+    AccountsModule,
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 100, // 100 requests per minute by default
+    }]),
   ],
-  controllers: [],
-  providers: [],
+  controllers: [AppController],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

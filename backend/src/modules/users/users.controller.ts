@@ -24,4 +24,10 @@ export class UsersController {
   async updateMe(@CurrentUser() user: User, @Body() updateProfileDto: UpdateProfileDto) {
     return this.usersService.updateProfile(user.id, updateProfileDto);
   }
+
+  @Patch('me/demo-mode')
+  @ApiOperation({ summary: 'Toggle demo mode for current user' })
+  async toggleDemoMode(@CurrentUser() user: User) {
+    return this.usersService.toggleDemoMode(user.id);
+  }
 }

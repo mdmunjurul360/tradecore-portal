@@ -21,4 +21,19 @@ export class UpdateProfileDto {
   @IsDateString()
   @IsOptional()
   dateOfBirth?: string;
+
+  @ApiPropertyOptional({ example: 'United States' })
+  @IsString()
+  @IsOptional()
+  country?: string;
+
+  @ApiPropertyOptional({ example: '123 Main St' })
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @ApiPropertyOptional({ example: 'Crypto enthusiast' })
+  @IsString()
+  @IsOptional()
+  bio?: string;
 }

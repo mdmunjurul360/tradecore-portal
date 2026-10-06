@@ -23,7 +23,9 @@ import {
   ChevronLeft,
   ChevronRight,
   HelpCircle,
-  X
+  X,
+  CandlestickChart,
+  Vault,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -48,6 +50,8 @@ const ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
   Headphones,
   Gift,
   Settings,
+  CandlestickChart,
+  Vault,
 };
 
 export const Sidebar: React.FC<SidebarProps> = ({

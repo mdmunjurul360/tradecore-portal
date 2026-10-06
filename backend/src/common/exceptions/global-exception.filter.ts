@@ -16,12 +16,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message = 
+    let message: any = 
       exception instanceof HttpException
         ? exception.getResponse()
         : 'Internal server error';
 
-    // Log the error
+    // Normalize message string from NestJS built-in error objects
+    if (typeof message === 'object' && message !== null) {
+      message = (message as any).message || (message as any).error || 'Internal server error';
+      if (Array.isArray(message)) {
+        message = message[0]; // Take first validation error if it's an array
+      }
+    }
     if (status >= 500) {
       this.logger.error(
         { err: exception, req: { method: request.method, url: request.url } },

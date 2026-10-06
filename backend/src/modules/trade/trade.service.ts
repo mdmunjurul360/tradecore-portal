@@ -140,12 +140,16 @@ export class TradeService {
         tx,
       );
 
+      const buyer = await tx.user.findUnique({ where: { id: params.buyerId } });
+      const buyerType = buyer?.demoModeEnabled ? 'DEMO' : 'REAL';
+
       // Create transaction record and ledger debit entry for buyer's quote settlement
       const buyerWallet = await tx.wallet.findUnique({
         where: {
-          userId_currency: {
+          userId_currency_type: {
             userId: params.buyerId,
             currency: tradingPair.quoteAsset.toUpperCase(),
+            type: buyerType,
           },
         },
       });
@@ -176,12 +180,16 @@ export class TradeService {
         });
       }
 
+      const seller = await tx.user.findUnique({ where: { id: params.sellerId } });
+      const sellerType = seller?.demoModeEnabled ? 'DEMO' : 'REAL';
+
       // b) Credit quote funds to seller's wallet with ledger entry & transaction record
       const sellerWallet = await tx.wallet.findUnique({
         where: {
-          userId_currency: {
+          userId_currency_type: {
             userId: params.sellerId,
             currency: tradingPair.quoteAsset.toUpperCase(),
+            type: sellerType,
           },
         },
       });
@@ -226,6 +234,108 @@ export class TradeService {
         priceDec,
       );
 
+      // 6.5 Referral Rewards (Mock calculation: 0.1% trade fee, 10% goes to referrer)
+      const FEE_RATE = new Prisma.Decimal('0.001');
+      const REFERRAL_REWARD_RATE = new Prisma.Decimal('0.10');
+      const tradeFee = totalDec.mul(FEE_RATE);
+      const referralReward = tradeFee.mul(REFERRAL_REWARD_RATE);
+
+      if (referralReward.gt(0)) {
+        // Process Buyer Referral
+        const buyerReferral = await tx.referral.findFirst({
+          where: { referredId: params.buyerId },
+        });
+        if (buyerReferral) {
+          await tx.referral.update({
+            where: { id: buyerReferral.id },
+            data: {
+              status: 'REWARDED',
+              rewardAmount: new Prisma.Decimal(buyerReferral.rewardAmount).plus(referralReward),
+            },
+          });
+          
+          const referrerWallet = await tx.wallet.findUnique({
+            where: {
+              userId_currency_type: {
+                userId: buyerReferral.referrerId,
+                currency: tradingPair.quoteAsset.toUpperCase(),
+                type: 'REAL',
+              },
+            },
+          });
+
+          if (referrerWallet) {
+            await this.walletLedgerService.creditWallet({
+              walletId: referrerWallet.id,
+              amount: referralReward,
+              currency: tradingPair.quoteAsset,
+              reference: `REF-REWARD-BUY-${trade.id}`,
+              type: TransactionType.REBATE,
+              status: TransactionStatus.COMPLETED,
+              description: `Referral reward from trade ${trade.id}`,
+            }, tx);
+
+            // Send Notification to referrer
+            await tx.notification.create({
+              data: {
+                userId: buyerReferral.referrerId,
+                type: NotificationType.IN_APP,
+                title: 'Referral Reward Received',
+                message: `You received a referral reward of ${referralReward} ${tradingPair.quoteAsset} from a trade.`,
+                isRead: false,
+              }
+            });
+          }
+        }
+
+        // Process Seller Referral
+        const sellerReferral = await tx.referral.findFirst({
+          where: { referredId: params.sellerId },
+        });
+        if (sellerReferral) {
+          await tx.referral.update({
+            where: { id: sellerReferral.id },
+            data: {
+              status: 'REWARDED',
+              rewardAmount: new Prisma.Decimal(sellerReferral.rewardAmount).plus(referralReward),
+            },
+          });
+          
+          const sellerReferrerWallet = await tx.wallet.findUnique({
+            where: {
+              userId_currency_type: {
+                userId: sellerReferral.referrerId,
+                currency: tradingPair.quoteAsset.toUpperCase(),
+                type: 'REAL',
+              },
+            },
+          });
+
+          if (sellerReferrerWallet) {
+            await this.walletLedgerService.creditWallet({
+              walletId: sellerReferrerWallet.id,
+              amount: referralReward,
+              currency: tradingPair.quoteAsset,
+              reference: `REF-REWARD-SELL-${trade.id}`,
+              type: TransactionType.REBATE,
+              status: TransactionStatus.COMPLETED,
+              description: `Referral reward from trade ${trade.id}`,
+            }, tx);
+
+            // Send Notification to referrer
+            await tx.notification.create({
+              data: {
+                userId: sellerReferral.referrerId,
+                type: NotificationType.IN_APP,
+                title: 'Referral Reward Received',
+                message: `You received a referral reward of ${referralReward} ${tradingPair.quoteAsset} from a trade.`,
+                isRead: false,
+              }
+            });
+          }
+        }
+      }
+
       // 7. Fire-and-forget Notifications for buyer and seller
       this.sendTradeNotifications(
         trade.id,
@@ -259,7 +369,7 @@ export class TradeService {
   /**
    * Fetches paginated trades for a specific user.
    */
-  async findAll(userId: string, filterDto: GetTradeFilterDto) {
+  async findAll(userId: string, filterDto: GetTradeFilterDto, isDemoMode = false) {
     const { tradingPairId, side, startDate, endDate, page = 1, limit = 10 } = filterDto;
     const skip = (page - 1) * limit;
 
@@ -268,6 +378,12 @@ export class TradeService {
         { buyerId: userId },
         { sellerId: userId },
       ],
+      buyerOrder: {
+        metadata: {
+          path: ['isDemo'],
+          equals: isDemoMode,
+        },
+      },
       ...(tradingPairId && { tradingPairId }),
       ...(startDate || endDate
         ? {
@@ -319,7 +435,27 @@ export class TradeService {
   /**
    * Fetches single trade details by ID.
    */
-  async findOne(id: string, userId?: string) {
+  async getPublicTrades(pair: string) {
+    const trades = await this.prisma.trade.findMany({
+      where: {
+        tradingPair: {
+          symbol: { equals: pair, mode: 'insensitive' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: {
+        id: true,
+        price: true,
+        quantity: true,
+        createdAt: true,
+      },
+    });
+
+    return trades;
+  }
+
+  async findOne(id: string, userId?: string, isDemoMode = false) {
     const trade = await this.prisma.trade.findUnique({
       where: { id },
       include: {
@@ -336,6 +472,12 @@ export class TradeService {
     }
 
     if (userId && trade.buyerId !== userId && trade.sellerId !== userId) {
+      throw new NotFoundException(`Trade ${id} not found`);
+    }
+
+    // Since metadata is typed as Json in prisma client, we have to type cast it.
+    const buyerOrderMetadata = trade.buyerOrder?.metadata as any;
+    if (userId && buyerOrderMetadata?.isDemo !== isDemoMode) {
       throw new NotFoundException(`Trade ${id} not found`);
     }
 
@@ -406,11 +548,15 @@ export class TradeService {
     const normalizedAsset = asset.toUpperCase();
     const cost = price.mul(quantity);
 
+    const user = await tx.user.findUnique({ where: { id: userId } });
+    const expectedType = user?.demoModeEnabled ? 'DEMO' : 'REAL';
+
     const existing = await tx.portfolioHolding.findUnique({
       where: {
-        userId_asset: {
+        userId_asset_type: {
           userId,
           asset: normalizedAsset,
+          type: expectedType,
         },
       },
     });
@@ -435,6 +581,7 @@ export class TradeService {
         data: {
           userId,
           asset: normalizedAsset,
+          type: expectedType,
           quantity,
           lockedQuantity: new Prisma.Decimal(0),
           averageBuyPrice: price,

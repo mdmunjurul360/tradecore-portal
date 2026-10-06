@@ -14,8 +14,16 @@ export class UsersService {
     return this.prisma.user.create({ data });
   }
 
-  async findByEmail(email: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { email } });
+  async findByEmail(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+      include: {
+        profile: true,
+        roles: {
+          include: { role: true },
+        },
+      },
+    });
   }
 
   async findById(id: string): Promise<User | null> {
@@ -34,7 +42,7 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, data: import('./dto/update-profile.dto').UpdateProfileDto) {
-    const { phone, firstName, lastName, dateOfBirth } = data;
+    const { phone, firstName, lastName, dateOfBirth, country, address, bio } = data;
 
     if (phone !== undefined) {
       const existingPhone = await this.prisma.user.findFirst({ where: { phone, id: { not: userId } } });
@@ -47,11 +55,14 @@ export class UsersService {
       });
     }
 
-    if (firstName !== undefined || lastName !== undefined || dateOfBirth !== undefined) {
+    if (firstName !== undefined || lastName !== undefined || dateOfBirth !== undefined || country !== undefined || address !== undefined || bio !== undefined) {
       const updateData: any = {};
       if (firstName !== undefined) updateData.firstName = firstName;
       if (lastName !== undefined) updateData.lastName = lastName;
       if (dateOfBirth !== undefined) updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+      if (country !== undefined) updateData.country = country;
+      if (address !== undefined) updateData.address = address;
+      if (bio !== undefined) updateData.bio = bio;
 
       await this.prisma.profile.upsert({
         where: { userId },
@@ -64,5 +75,20 @@ export class UsersService {
     }
 
     return this.getProfile(userId);
+  }
+
+  async toggleDemoMode(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new ConflictException('User not found');
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: { demoModeEnabled: !user.demoModeEnabled },
+    });
+
+    return {
+      message: `Demo mode ${updatedUser.demoModeEnabled ? 'enabled' : 'disabled'}`,
+      demoModeEnabled: updatedUser.demoModeEnabled,
+    };
   }
 }

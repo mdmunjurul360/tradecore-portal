@@ -43,6 +43,8 @@ type OrderWithTradingPair = PlatformOrder & { tradingPair: TradingPair };
 // Service
 // ============================================================
 
+import { TradingGateway } from '../websockets/trading/trading.gateway';
+
 @Injectable()
 export class MatchingEngineService {
   private readonly logger = new Logger(MatchingEngineService.name);
@@ -53,6 +55,7 @@ export class MatchingEngineService {
     private readonly portfolioService: PortfolioService,
     private readonly notificationService: NotificationService,
     private readonly tradeService: TradeService,
+    private readonly tradingGateway: TradingGateway,
   ) {}
 
   // ============================================================
@@ -233,6 +236,10 @@ export class MatchingEngineService {
           in: [PlatformOrderStatus.PENDING, PlatformOrderStatus.PARTIALLY_FILLED],
         },
         remainingQuantity: { gt: 0 },
+        metadata: {
+          path: ['isDemo'],
+          equals: (incomingOrder.metadata as any)?.isDemo || false,
+        },
         ...priceFilter,
       },
       orderBy: [
@@ -350,6 +357,20 @@ export class MatchingEngineService {
       `Fill executed: ${trade.id} | ${tradingPair.symbol} | Qty: ${executionQty} @ ${executionPrice} | Buyer: ${buyOrder.userId} | Seller: ${sellOrder.userId}`,
     );
 
+    // Broadcast trade
+    setImmediate(() => {
+      this.tradingGateway.broadcastTradeUpdate(tradingPair.symbol, {
+        id: trade.id,
+        price: executionPrice,
+        quantity: executionQty,
+        side: incomingOrder.side,
+        createdAt: new Date().toISOString(),
+      });
+      this.tradingGateway.broadcastPriceUpdate(tradingPair.symbol, {
+        price: executionPrice,
+      });
+    });
+
     return {
       matchedTradeId: trade.id,
       buyOrderId: buyOrder.id,
@@ -452,6 +473,14 @@ export class MatchingEngineService {
           },
         );
         notifiedUsers.add(match.buyerUserId);
+        
+        setImmediate(() => {
+          this.tradingGateway.broadcastUserOrderUpdate(match.buyerUserId, {
+            type: 'ORDER_FILLED',
+            orderId: match.buyOrderId,
+            symbol,
+          });
+        });
       }
 
       // Notify seller
@@ -473,6 +502,14 @@ export class MatchingEngineService {
           },
         );
         notifiedUsers.add(match.sellerUserId);
+        
+        setImmediate(() => {
+          this.tradingGateway.broadcastUserOrderUpdate(match.sellerUserId, {
+            type: 'ORDER_FILLED',
+            orderId: match.sellOrderId,
+            symbol,
+          });
+        });
       }
     }
 
@@ -501,6 +538,14 @@ export class MatchingEngineService {
           },
         },
       );
+      
+      setImmediate(() => {
+        this.tradingGateway.broadcastUserOrderUpdate(incomingOrder.userId, {
+          type: 'ORDER_PARTIALLY_FILLED',
+          orderId: incomingOrder.id,
+          symbol,
+        });
+      });
     }
   }
 }

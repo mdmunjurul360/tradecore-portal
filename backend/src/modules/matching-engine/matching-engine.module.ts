@@ -5,6 +5,7 @@ import { WalletLedgerModule } from '../wallet-ledger/wallet-ledger.module';
 import { PortfolioModule } from '../portfolio/portfolio.module';
 import { NotificationModule } from '../notification/notification.module';
 import { TradeModule } from '../trade/trade.module';
+import { WebsocketsModule } from '../websockets/websockets.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { TradeModule } from '../trade/trade.module';
     PortfolioModule,
     NotificationModule,
     TradeModule,
+    WebsocketsModule,
   ],
   providers: [MatchingEngineService],
   exports: [MatchingEngineService],

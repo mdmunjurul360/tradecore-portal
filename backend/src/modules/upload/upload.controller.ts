@@ -65,4 +65,44 @@ export class UploadController {
     }
     return this.uploadService.handleKycUpload(file);
   }
+
+  @Post('avatar')
+  @ApiOperation({ summary: 'Upload a user avatar' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: uploadDir,
+        filename: (req, file, cb) => {
+          const uniqueSuffix = randomUUID();
+          const ext = path.extname(file.originalname);
+          cb(null, `avatar-${uniqueSuffix}${ext}`);
+        },
+      }),
+      limits: {
+        fileSize: MAX_FILE_SIZE,
+      },
+      fileFilter: kycFileFilter,
+    }),
+  )
+  async uploadAvatar(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('A valid image file is required.');
+    }
+    return {
+      message: 'Avatar uploaded successfully',
+      fileUrl: `/uploads/kyc/${file.filename}`
+    };
+  }
 }

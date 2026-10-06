@@ -23,6 +23,16 @@ export class DepositController {
     return this.depositService.createDeposit(user.id, createDepositDto);
   }
 
+  @Get('address/:currency/:networkId')
+  @ApiOperation({ summary: 'Get or generate a deposit address for a specific currency and network' })
+  async getAddress(
+    @CurrentUser() user: User,
+    @Param('currency') currency: string,
+    @Param('networkId') networkId: string,
+  ) {
+    return this.depositService.getDepositAddress(user.id, currency, networkId);
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all user deposit requests' })
   async findAll(

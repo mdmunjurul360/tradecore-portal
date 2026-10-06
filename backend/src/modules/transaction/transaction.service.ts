@@ -1,19 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { GetTransactionsFilterDto } from './dto/get-transactions-filter.dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class TransactionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(userId: string, filterDto: GetTransactionsFilterDto) {
+  async findAll(userId: string, filterDto: GetTransactionsFilterDto, isDemoMode = false) {
     const { type, status, page = 1, limit = 10 } = filterDto;
     
     const skip = (page - 1) * limit;
 
-    const where = {
+    const where: Prisma.TransactionWhereInput = {
       wallet: {
         userId,
+        type: isDemoMode ? 'DEMO' : 'REAL',
       },
       ...(type && { type }),
       ...(status && { status }),
@@ -42,12 +44,13 @@ export class TransactionService {
     };
   }
 
-  async findOne(userId: string, id: string) {
+  async findOne(userId: string, id: string, isDemoMode = false) {
     const transaction = await this.prisma.transaction.findFirst({
       where: {
         id,
         wallet: {
           userId,
+          type: isDemoMode ? 'DEMO' : 'REAL',
         },
       },
     });
