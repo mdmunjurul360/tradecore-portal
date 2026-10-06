@@ -10,27 +10,32 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useState, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { userService } from '@/services/user.service';
+import { accountsService } from '@/services/accounts.service';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const { user, updateUser } = useAuthStore();
   const queryClient = useQueryClient();
   
+  const { data: accountsData = [] as any[], isLoading: isLoadingAccounts } = useQuery({
+    queryKey: ['trading-accounts'],
+    queryFn: accountsService.list,
+  });
+
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-overview'],
     queryFn: dashboardService.getOverview,
   });
 
-  const balance = data?.balance?.total || 0;
-  const activeOrders = data?.orders?.total || 0;
-  const pnl = data?.portfolio?.pnl || 0;
-  
-  // Forex calculations approximation
-  const equity = balance + pnl;
-  const freeMargin = balance;
-  const marginLevel = balance > 0 ? '> 1000%' : '0.00%';
-  const openPositionsCount = data?.portfolio?.items?.length || 0;
+  const liveAccounts = (accountsData as any[]).filter((a: any) => a.type === 'LIVE' && !a.isArchived);
+  const demoAccounts = (accountsData as any[]).filter((a: any) => a.type === 'DEMO' && !a.isArchived);
 
+  const totalLiveBalance = liveAccounts.reduce((sum: number, a: any) => sum + Number(a.balance || 0), 0);
+  const totalDemoBalance = demoAccounts.reduce((sum: number, a: any) => sum + Number(a.balance || 0), 0);
+  
+  const pnl = data?.portfolio?.pnl || 0;
+  const activeOrders = data?.orders?.total || 0;
+  const openPositionsCount = data?.portfolio?.items?.length || 0;
   const transactions = Array.isArray(data?.transactions) ? data.transactions.slice(0, 5) : [];
   
   const { data: liveMarketsData } = useQuery({
@@ -67,48 +72,48 @@ export default function DashboardPage() {
         {/* Row 1 */}
         <Card className="border-l-4 border-l-blue-500 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Balance</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Live Balance</CardTitle>
             <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold">{balance.toFixed(2)} USD</div>
+            {isLoadingAccounts ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold">{totalLiveBalance.toFixed(2)} USD</div>
             )}
           </CardContent>
         </Card>
         
-        <Card className="border-l-4 border-l-green-500 shadow-sm">
+        <Card className="border-l-4 border-l-purple-500 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Equity</CardTitle>
-            <Activity className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Demo Balance</CardTitle>
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold">{equity.toFixed(2)} USD</div>
+            {isLoadingAccounts ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold">{totalDemoBalance.toFixed(2)} USD</div>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-purple-500 shadow-sm">
+        <Card className="border-l-4 border-l-green-500 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Free Margin</CardTitle>
-            <Shield className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Live Accounts</CardTitle>
+            <Activity className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold">{freeMargin.toFixed(2)} USD</div>
+            {isLoadingAccounts ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold">{liveAccounts.length}</div>
             )}
           </CardContent>
         </Card>
 
         <Card className="border-l-4 border-l-orange-500 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium">Margin Level</CardTitle>
-            <Percent className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Demo Accounts</CardTitle>
+            <Activity className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            {isLoading ? <Skeleton className="h-8 w-24" /> : (
-              <div className="text-2xl font-bold">{marginLevel}</div>
+            {isLoadingAccounts ? <Skeleton className="h-8 w-24" /> : (
+              <div className="text-2xl font-bold">{demoAccounts.length}</div>
             )}
           </CardContent>
         </Card>

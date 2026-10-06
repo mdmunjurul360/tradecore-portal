@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   ArrowDownToLine, ArrowUpFromLine, ArrowRightLeft, FileText, Plus, PlaySquare, Info, Pencil, Archive,
-  ArchiveRestore, CheckCircle2, AlertCircle, Loader2, Repeat,
+  ArchiveRestore, CheckCircle2, AlertCircle, Loader2, Repeat, ChevronDown, ChevronRight, Settings
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DepositPanel } from '@/components/wallet/DepositPanel';
@@ -84,9 +84,9 @@ export default function WalletPage() {
 
   const switchMutation = useMutation({
     mutationFn: (id: string) => accountsService.switch(id),
-    onSuccess: async (res) => {
+    onSuccess: async (res: any) => {
       const u = useAuthStore.getState().user;
-      if (u) updateUser({ ...u, demoModeEnabled: res.demoModeEnabled });
+      if (u) updateUser({ ...u, demoModeEnabled: res.type === 'DEMO' });
       await refreshAll();
     },
   });
@@ -157,20 +157,7 @@ export default function WalletPage() {
 
         <TabsContent value="accounts" className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex gap-1 bg-muted/50 p-1 rounded-lg w-fit">
-              {(['real', 'demo', 'archived'] as AccountFilter[]).map((f) => (
-                <button
-                  key={f}
-                  id={`filter-${f}`}
-                  onClick={() => setFilter(f)}
-                  className={`px-4 py-1.5 text-sm rounded-md capitalize transition-colors ${
-                    filter === f ? 'bg-background shadow font-semibold' : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {f} ({f === 'archived' ? accounts.filter((a) => a.isArchived).length : accounts.filter((a) => !a.isArchived && (f === 'demo') === (a.type === 'DEMO')).length})
-                </button>
-              ))}
-            </div>
+            <h2 className="text-xl font-bold">Account Overview</h2>
             <Button id="open-new-account-btn" size="sm" className="gap-2" onClick={() => setOpenCreate(true)}>
               <Plus className="w-4 h-4" /> Open New Account
             </Button>
@@ -181,30 +168,55 @@ export default function WalletPage() {
               <Skeleton className="h-72 w-full" />
               <Skeleton className="h-72 w-full" />
             </div>
-          ) : visible.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-10 text-center bg-muted/20 rounded-md border border-dashed">
-              <FileText className="w-8 h-8 text-muted-foreground mb-2" />
-              <p className="text-sm font-medium">No {filter} accounts</p>
-            </div>
           ) : (
-            <div className="grid gap-6 md:grid-cols-2">
-              {visible.map((acc) => (
-                <AccountCard
-                  key={acc.id}
-                  acc={acc}
-                  busy={switchMutation.isPending && switchMutation.variables === acc.id}
-                  onSwitch={() => withActive(acc, () => {})}
-                  onTrade={() => withActive(acc, () => router.push('/trading'))}
-                  onDeposit={() => goToFunding(acc, 'deposit')}
-                  onWithdraw={() => goToFunding(acc, 'withdraw')}
-                  onTransfer={() => { setTransferFrom(acc); setActiveTab('transfer'); }}
-                  onDetails={() => setDetailsTarget(acc)}
-                  onRename={() => setRenameTarget(acc)}
-                  onArchive={() => {
-                    if (acc.isArchived || confirm(`Archive account #${acc.accountNumber}?`)) archiveMutation.mutate(acc);
-                  }}
+            <div className="space-y-6">
+              <AccountSection 
+                title="Live Accounts" 
+                accounts={accounts.filter((a) => a.type === 'LIVE' && !a.isArchived)}
+                busyId={switchMutation.isPending ? switchMutation.variables : null}
+                onSwitch={(acc) => withActive(acc, () => {})}
+                onTrade={(acc) => withActive(acc, () => router.push('/trading'))}
+                onDeposit={(acc) => goToFunding(acc, 'deposit')}
+                onWithdraw={(acc) => goToFunding(acc, 'withdraw')}
+                onTransfer={(acc) => { setTransferFrom(acc); setActiveTab('transfer'); }}
+                onDetails={(acc) => setDetailsTarget(acc)}
+                onRename={(acc) => setRenameTarget(acc)}
+                onArchive={(acc) => {
+                  if (confirm(`Archive account #${acc.accountNumber}?`)) archiveMutation.mutate(acc);
+                }}
+              />
+              
+              <AccountSection 
+                title="Demo Accounts" 
+                accounts={accounts.filter((a) => a.type === 'DEMO' && !a.isArchived)}
+                busyId={switchMutation.isPending ? switchMutation.variables : null}
+                onSwitch={(acc) => withActive(acc, () => {})}
+                onTrade={(acc) => withActive(acc, () => router.push('/trading'))}
+                onDeposit={(acc) => goToFunding(acc, 'deposit')}
+                onWithdraw={(acc) => goToFunding(acc, 'withdraw')}
+                onTransfer={(acc) => { setTransferFrom(acc); setActiveTab('transfer'); }}
+                onDetails={(acc) => setDetailsTarget(acc)}
+                onRename={(acc) => setRenameTarget(acc)}
+                onArchive={(acc) => {
+                  if (confirm(`Archive account #${acc.accountNumber}?`)) archiveMutation.mutate(acc);
+                }}
+              />
+
+              {accounts.some((a) => a.isArchived) && (
+                <AccountSection 
+                  title="Archived Accounts" 
+                  accounts={accounts.filter((a) => a.isArchived)}
+                  busyId={switchMutation.isPending ? switchMutation.variables : null}
+                  onSwitch={() => {}}
+                  onTrade={() => {}}
+                  onDeposit={() => {}}
+                  onWithdraw={() => {}}
+                  onTransfer={() => {}}
+                  onDetails={(acc) => setDetailsTarget(acc)}
+                  onRename={(acc) => setRenameTarget(acc)}
+                  onArchive={(acc) => archiveMutation.mutate(acc)}
                 />
-              ))}
+              )}
             </div>
           )}
         </TabsContent>
@@ -317,6 +329,63 @@ export default function WalletPage() {
 
 /* ------------------------------------------------------------------ */
 
+function AccountSection(props: {
+  title: string;
+  accounts: TradingAccountDto[];
+  busyId: any;
+  onSwitch: (a: TradingAccountDto) => void;
+  onTrade: (a: TradingAccountDto) => void;
+  onDeposit: (a: TradingAccountDto) => void;
+  onWithdraw: (a: TradingAccountDto) => void;
+  onTransfer: (a: TradingAccountDto) => void;
+  onDetails: (a: TradingAccountDto) => void;
+  onRename: (a: TradingAccountDto) => void;
+  onArchive: (a: TradingAccountDto) => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const total = props.accounts.reduce((sum, a) => sum + Number(a.balance || 0), 0);
+
+  if (props.accounts.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <div 
+        className="flex items-center justify-between cursor-pointer group hover:bg-muted/50 p-2 rounded-lg transition-colors"
+        onClick={() => setOpen(!open)}
+      >
+        <div className="flex items-center gap-2">
+          {open ? <ChevronDown className="w-5 h-5 text-muted-foreground group-hover:text-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-foreground" />}
+          <h3 className="text-lg font-bold">{props.title}</h3>
+          <span className="bg-muted text-muted-foreground text-xs px-2 py-0.5 rounded-full font-medium">{props.accounts.length}</span>
+        </div>
+        <div className="text-right">
+          <p className="text-sm text-muted-foreground">Total Balance</p>
+          <p className="font-bold">{fmt(total)} <span className="text-xs font-normal">USD</span></p>
+        </div>
+      </div>
+      {open && (
+        <div className="grid gap-6 md:grid-cols-2">
+          {props.accounts.map((acc) => (
+            <AccountCard
+              key={acc.id}
+              acc={acc}
+              busy={props.busyId === acc.id}
+              onSwitch={() => props.onSwitch(acc)}
+              onTrade={() => props.onTrade(acc)}
+              onDeposit={() => props.onDeposit(acc)}
+              onWithdraw={() => props.onWithdraw(acc)}
+              onTransfer={() => props.onTransfer(acc)}
+              onDetails={() => props.onDetails(acc)}
+              onRename={() => props.onRename(acc)}
+              onArchive={() => props.onArchive(acc)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountCard(props: {
   acc: TradingAccountDto;
   busy: boolean;
@@ -405,7 +474,7 @@ function AccountCard(props: {
           <ArrowRightLeft className="w-4 h-4" /> Transfer
         </Button>
         <Button id={`details-${n}`} variant="ghost" size="sm" className="gap-1" onClick={props.onDetails}>
-          <Info className="w-4 h-4" /> Details
+          <Settings className="w-4 h-4" /> Settings
         </Button>
       </CardFooter>
     </Card>
@@ -544,7 +613,7 @@ function DetailsDialog({ acc, onClose }: { acc: TradingAccountDto | null; onClos
     <Dialog open={!!acc} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Account details</DialogTitle>
+          <DialogTitle>Account settings</DialogTitle>
           <DialogDescription>Use these credentials to identify your account.</DialogDescription>
         </DialogHeader>
         <div id="account-details" className="divide-y rounded-md border">
@@ -555,6 +624,20 @@ function DetailsDialog({ acc, onClose }: { acc: TradingAccountDto | null; onClos
             </div>
           ))}
         </div>
+        {acc && !acc.isArchived && (
+          <div className="space-y-2 mt-4 pt-4 border-t">
+            <h4 className="text-sm font-semibold">Trading Preferences</h4>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-muted-foreground">Max leverage</span>
+              <div className="flex items-center gap-2">
+                <select className="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring" defaultValue={acc.leverage}>
+                  {[50, 100, 200, 500, 1000, 2000].map((l) => <option key={l} value={l}>1:{l}</option>)}
+                </select>
+                <Button size="sm" variant="secondary" className="h-8 text-xs px-3" onClick={() => alert('Leverage update request submitted. Awaiting backend approval.')}>Change</Button>
+              </div>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
