@@ -28,7 +28,12 @@ export class OrderController {
   @Post()
   @ApiOperation({ summary: 'Place a new order' })
   async create(@CurrentUser() user: User, @Body() dto: CreateOrderDto) {
-    return this.orderService.create(user.id, dto, user.demoModeEnabled);
+    try {
+      const result = await this.orderService.create(user.id, dto, user.demoModeEnabled);
+      return result;
+    } catch (e: any) {
+      throw e;
+    }
   }
 
   @Get('open')

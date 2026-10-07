@@ -72,11 +72,35 @@ export function useTradingSocket(symbol: string, interval: string = '15m') {
               asks: ob.asks.map((a: any) => ({ price: parseFloat(a.price || a[0]), quantity: parseFloat(a.quantity || a[1]) }))
             });
           }
-          if (tr && tr.length > 0) setTrades(tr);
-          if (market && market.price) setPrice(market.price);
-          if (klines && klines.length > 0) {
-            const k = klines[klines.length - 1];
-            setKline({ t: k.time, o: k.open.toString(), h: k.high.toString(), l: k.low.toString(), c: k.close.toString() });
+          if (tr && tr.length > 0) setTrades(tr as any[]);
+          if (market && market.price) {
+            setPrice(market.price);
+            
+            if (klines && klines.length > 0) {
+              const k = klines[klines.length - 1] as any;
+              
+              setKline(prev => {
+                // If the candle time is new, just use the fresh deterministic candle but inject the live price as close.
+                if (!prev || prev.t !== k.time) {
+                  return {
+                    t: k.time,
+                    o: k.open.toString(),
+                    h: Math.max(k.high, market.price).toString(),
+                    l: Math.min(k.low, market.price).toString(),
+                    c: market.price.toString()
+                  };
+                }
+                
+                // If it's the same candle interval, aggregate the new market price into the high/low/close!
+                return {
+                  t: prev.t,
+                  o: prev.o,
+                  h: Math.max(parseFloat(prev.h), market.price).toString(),
+                  l: Math.min(parseFloat(prev.l), market.price).toString(),
+                  c: market.price.toString()
+                };
+              });
+            }
           }
         } catch (e) {
           console.error('REST polling failed:', e);
@@ -93,7 +117,7 @@ export function useTradingSocket(symbol: string, interval: string = '15m') {
     } else {
       // Fetch initial trades
       marketService.getRecentTrades(symbol, 50).then((initialTrades) => {
-        if (isComponentMounted) setTrades(initialTrades);
+        if (isComponentMounted) setTrades(initialTrades as any[]);
       });
 
       const connectBinance = () => {
@@ -104,7 +128,6 @@ export function useTradingSocket(symbol: string, interval: string = '15m') {
           return;
         }
 
-        console.log(`[Binance WS] Connecting to ${streamSymbol}...`);
         const streams = [
           `${streamSymbol}@depth20@100ms`,
           `${streamSymbol}@trade`,
@@ -115,7 +138,6 @@ export function useTradingSocket(symbol: string, interval: string = '15m') {
         ws = new WebSocket(`wss://stream.binance.com:9443/stream?streams=${streams}`);
         
         ws.onopen = () => {
-          console.log(`[Binance WS] Connected & Subscribed to ${streams}`);
           reconnectAttempts = 0; // reset on success
         };
 
@@ -149,9 +171,7 @@ export function useTradingSocket(symbol: string, interval: string = '15m') {
         };
 
         ws.onclose = (event) => {
-          console.log(`[Binance WS] Disconnected (code: ${event.code}).`);
           if (isComponentMounted) {
-            console.log(`[Binance WS] Reconnect attempt ${reconnectAttempts + 1}...`);
             reconnectAttempts++;
             setTimeout(connectBinance, 3000);
           }

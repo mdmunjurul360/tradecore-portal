@@ -8,7 +8,7 @@ export const adminService = {
   },
 
   // Users
-  getUsers: async (params?: { page?: number; limit?: number; search?: string }) => {
+  getUsers: async (params?: { page?: number; limit?: number; search?: string; status?: string }) => {
     const response = await api.get('/admin/users', { params });
     return response.data?.data || response.data;
   },
@@ -82,13 +82,33 @@ export const adminService = {
     return response.data;
   },
 
-  updateUser: async (id: string, data: any) => {
+  disableUser: async (id: string) => {
+    const response = await api.patch(`/admin/users/${id}/disable`, {});
+    return response.data;
+  },
+
+  enableUser: async (id: string) => {
+    const response = await api.patch(`/admin/users/${id}/enable`, {});
+    return response.data;
+  },
+
+  updateUser: async (id: string, data: Record<string, unknown>) => {
     const response = await api.patch(`/admin/users/${id}`, data);
     return response.data;
   },
 
   resetPassword: async (id: string, password: string) => {
     const response = await api.patch(`/admin/users/${id}/reset-password`, { password });
+    return response.data;
+  },
+
+  promoteToAdmin: async (id: string) => {
+    const response = await api.patch(`/admin/users/${id}/promote`, {});
+    return response.data;
+  },
+
+  removeAdmin: async (id: string) => {
+    const response = await api.patch(`/admin/users/${id}/demote`, {});
     return response.data;
   },
 

@@ -28,7 +28,7 @@ export default function TradingPage() {
   const [pendingType, setPendingType] = useState<'LIMIT' | 'STOP'>('LIMIT');
   const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
   const [priceInput, setPriceInput] = useState('');
-  const [amountInput, setAmountInput] = useState('0.01');
+  const [amountInput, setAmountInput] = useState('100');
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
   const [isMobile, setIsMobile] = useState(false);
@@ -115,20 +115,40 @@ export default function TradingPage() {
     }
   };
 
-  const handleOrder = async (e: React.FormEvent) => {
+  const handleOrder = async (e: React.FormEvent, forceSide?: 'BUY' | 'SELL') => {
     e.preventDefault();
-    const amount = parseFloat(amountInput);
+    const actualOrderSide = forceSide || orderSide;
+    const usdMargin = parseFloat(amountInput || '100');
     const actualOrderType = orderType === 'MARKET' ? 'MARKET' : pendingType;
-    const price = orderType === 'PENDING' ? parseFloat(priceInput) : (orderSide === 'BUY' ? currentPrice : undefined);
+    const price = orderType === 'PENDING' ? parseFloat(priceInput) : currentPrice;
 
-    if (isNaN(amount) || amount <= 0) return alert('Invalid amount');
+    if (isNaN(usdMargin) || usdMargin <= 0) return alert('Invalid amount');
     if (orderType === 'PENDING' && (isNaN(price as number) || (price as number) <= 0)) return alert('Invalid price');
+
+    const instrumentDetails = marketService.getInstrumentDetails(symbol);
+    const leverage = Number(instrumentDetails.leverage);
+    const contractSize = Number(instrumentDetails.contractSize);
+    const minLot = Number(instrumentDetails.minLot || 0.01);
+
+    // Calculate raw Lot Size from USD Margin
+    const rawAmount = (usdMargin * leverage) / (contractSize * currentPrice);
+    
+    // Round down to the nearest minLot step (e.g. 0.01)
+    const precision = Math.max(0, -Math.floor(Math.log10(minLot)));
+    const factor = Math.pow(10, precision);
+    const amount = Math.floor(rawAmount * factor) / factor;
+
+    if (!isFinite(amount) || amount < minLot) {
+      return alert(`Amount too low. With $${usdMargin} margin and 1:${leverage} leverage, you can afford ${rawAmount.toFixed(4)} lots, but the minimum order size is ${minLot} lots.`);
+    }
+
+    if (!currentPrice || currentPrice <= 0) return alert('Live price is unavailable. Please wait.');
 
     try {
       await orderService.createOrder({
         symbol,
         type: actualOrderType,
-        side: orderSide,
+        side: actualOrderSide,
         amount,
         price,
         isCfd: true,
@@ -137,9 +157,10 @@ export default function TradingPage() {
       });
       alert('Order placed successfully!');
       refetchOpenOrders();
-      setAmountInput('');
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Failed to place order.');
+      console.error('ORDER PLACEMENT ERROR:', err?.response?.data || err);
+      const msg = err?.response?.data?.message || err?.message || 'Failed to place order.';
+      alert(typeof msg === 'object' ? JSON.stringify(msg) : msg);
     }
   };
 
@@ -160,183 +181,88 @@ export default function TradingPage() {
     </div>
   );
 
-  const OrderBookComponent = (
-    <div className="flex flex-col h-full bg-card rounded border overflow-hidden min-h-[300px] lg:min-h-0">
-      <div className="p-2 border-b bg-muted/50 font-semibold text-sm">Order Book</div>
-      <div className="flex flex-col h-full overflow-hidden text-xs">
-        <div className="flex justify-between px-3 py-1 text-muted-foreground font-medium">
-          <span>Price</span>
-          <span>Volume</span>
-        </div>
-        
-        {/* Asks (Sell Orders) - Reverse order so lowest price is at bottom */}
-        <ScrollArea className="flex-1 px-2">
-          <div className="flex flex-col-reverse justify-end min-h-full">
-            {orderBook?.asks?.length > 0 ? (
-              orderBook.asks.slice(0, 20).map((ask: any, i: number) => (
-                <div key={i} className="flex justify-between py-1 cursor-pointer hover:bg-muted px-1" onClick={() => setPriceInput(ask.price)}>
-                  <span className="text-red-500 font-medium">{parseFloat(ask.price).toFixed(5)}</span>
-                  <span>{parseFloat(ask.quantity).toFixed(2)}</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-muted-foreground py-2 italic">No sell orders</div>
-            )}
-          </div>
-        </ScrollArea>
 
-        {/* Current Price Divider */}
-        <div className="flex flex-col items-center justify-center py-1.5 border-y bg-muted/30">
-          <span className={`text-lg font-bold ${market.change24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            ${currentPrice.toFixed(5)}
-          </span>
-          {orderBook?.asks?.length > 0 && orderBook?.bids?.length > 0 && (
-            <span className="text-[10px] text-muted-foreground uppercase mt-0.5 tracking-wider font-medium">
-              Spread: {((Number(orderBook.asks[orderBook.asks.length - 1].price) - Number(orderBook.bids[0].price)) * 10000).toFixed(1)}
-            </span>
-          )}
-        </div>
 
-        {/* Bids (Buy Orders) - Normal order so highest price is at top */}
-        <ScrollArea className="flex-1 px-2">
-          <div className="flex flex-col min-h-full">
-            {orderBook?.bids?.length > 0 ? (
-              orderBook.bids.slice(0, 20).map((bid: any, i: number) => (
-                <div key={i} className="flex justify-between py-1 cursor-pointer hover:bg-muted px-1" onClick={() => setPriceInput(bid.price)}>
-                  <span className="text-green-500 font-medium">{parseFloat(bid.price).toFixed(5)}</span>
-                  <span>{parseFloat(bid.quantity).toFixed(2)}</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-center text-muted-foreground py-2 italic">No buy orders</div>
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-    </div>
-  );
-
-  const TradingFormComponent = (
+    const TradingFormComponent = (
     <div className="flex flex-col h-full bg-card rounded border min-h-[400px] lg:min-h-0">
-      <div className="p-4 border-b bg-muted/30 flex items-center justify-between">
-        <span className="font-bold text-base">Trade {baseCurrency}</span>
-      </div>
-      <div className="p-4 flex-1 flex flex-col overflow-auto">
-        
-        {/* BUY / SELL Toggle */}
-        <div className="flex bg-muted p-1 rounded-md mb-6">
-          <button 
-            className={`flex-1 py-2 text-sm font-bold rounded-sm transition-all ${orderSide === 'BUY' ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10'}`}
-            onClick={() => setOrderSide('BUY')}
-          >
-            Buy
-          </button>
-          <button 
-            className={`flex-1 py-2 text-sm font-bold rounded-sm transition-all ${orderSide === 'SELL' ? 'bg-red-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10'}`}
-            onClick={() => setOrderSide('SELL')}
-          >
-            Sell
-          </button>
+      <div className="p-3 border-b bg-muted/30 flex items-center justify-between shrink-0">
+        <span className="font-bold text-sm">Trade {baseCurrency}</span>
+        <div className="text-xs text-muted-foreground flex items-center gap-1">
+          Spread: <span className="font-bold text-foreground">0.3</span>
         </div>
-
-        <Tabs defaultValue="MARKET" onValueChange={(val) => setOrderType(val as 'MARKET'|'PENDING')} className="flex-1 flex flex-col">
-          <TabsList className="grid w-full grid-cols-2 mb-6 h-10 bg-muted/50">
-            <TabsTrigger value="MARKET" className="text-sm font-medium">Market Order</TabsTrigger>
-            <TabsTrigger value="PENDING" className="text-sm font-medium">Pending Order</TabsTrigger>
+      </div>
+      <div className="flex-1 flex flex-col relative overflow-hidden">
+        <Tabs defaultValue="MARKET" onValueChange={(val) => {
+          setOrderType(val === 'MARKET' ? 'MARKET' : 'PENDING');
+          if (val !== 'MARKET') setPendingType(val);
+        }} className="flex-1 flex flex-col">
+          <TabsList className="grid w-full grid-cols-3 h-9 bg-muted/50 rounded-none shrink-0">
+            <TabsTrigger value="MARKET" className="text-xs font-medium">Market</TabsTrigger>
+            <TabsTrigger value="LIMIT" className="text-xs font-medium">Limit</TabsTrigger>
+            <TabsTrigger value="STOP" className="text-xs font-medium">Stop</TabsTrigger>
           </TabsList>
 
-          <form onSubmit={handleOrder} className="flex flex-col flex-1">
-            <div className="space-y-5 flex-1">
-              
-              {/* Price Input */}
-              {orderType === 'PENDING' ? (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Pending Type</label>
-                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={pendingType} onChange={(e) => setPendingType(e.target.value as any)}>
-                      <option value="LIMIT">{orderSide === 'BUY' ? 'Buy Limit' : 'Sell Limit'}</option>
-                      <option value="STOP">{orderSide === 'BUY' ? 'Buy Stop' : 'Sell Stop'}</option>
-                    </select>
+          <form onSubmit={(e) => e.preventDefault()} className="flex flex-col flex-1 overflow-y-auto">
+            <div className="p-3 space-y-4 flex-1">
+              {orderType === 'PENDING' && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Price</label>
+                    <span className="text-[10px] font-medium text-muted-foreground">{currentPrice ? currentPrice.toFixed(5) : '0.00000'}</span>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Price</label>
-                      <span className="text-xs font-medium text-muted-foreground">{currentPrice ? currentPrice.toFixed(5) : '0.00000'}</span>
-                    </div>
-                  <div className="relative">
-                    <Input 
-                      type="number" 
-                      step="0.00001" 
-                      value={priceInput}
-                      onChange={(e) => setPriceInput(e.target.value)}
-                      required 
-                      className="h-12 px-3 text-base font-medium"
-                      placeholder="0.00000"
-                    />
-                  </div>
-                </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Price</label>
-                  <div className="h-12 bg-muted/50 rounded-md border flex items-center px-3 text-muted-foreground text-sm font-medium">
-                    Market Execution
-                  </div>
+                  <Input 
+                    type="number" step="0.00001" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} required 
+                    className="h-9 px-2 text-sm font-medium" placeholder="0.00000"
+                  />
                 </div>
               )}
-              
-              {/* Lot Size Input */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Lot Size</label>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Amount (Margin)</label>
+                  <span className="font-bold text-primary text-xs">${parseFloat(amountInput || '100').toFixed(2)}</span>
                 </div>
-                <div className="relative flex items-center gap-2">
-                  <Button type="button" variant="outline" className="h-12 w-12" onClick={() => setAmountInput((parseFloat(amountInput || '0') - 0.01).toFixed(2))}>-</Button>
-                  <Input 
-                    type="number" 
-                    step="0.01" 
-                    value={amountInput}
-                    onChange={(e) => setAmountInput(e.target.value)}
-                    required 
-                    className="h-12 px-3 text-center text-base font-medium flex-1"
-                    placeholder="1.00" 
-                  />
-                  <Button type="button" variant="outline" className="h-12 w-12" onClick={() => setAmountInput((parseFloat(amountInput || '0') + 0.01).toFixed(2))}>+</Button>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[50, 100, 200, 500, 1000, 5000].map(amt => (
+                    <button key={amt} type="button" onClick={() => setAmountInput(amt.toString())}
+                      className={`h-8 text-[10px] font-bold rounded border transition-colors ${parseFloat(amountInput || '100') === amt ? 'bg-primary/10 border-primary text-primary' : 'border-muted hover:bg-muted text-muted-foreground bg-card'}`}>
+                      ${amt}
+                    </button>
+                  ))}
                 </div>
               </div>
-
-              {/* Stop Loss & Take Profit */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Stop Loss</label>
-                  <Input type="number" step="0.00001" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} className="h-10 text-sm" placeholder="Optional" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Stop Loss</label>
+                  <Input type="number" step="0.00001" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} className="h-9 text-sm" placeholder="Optional" />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Take Profit</label>
-                  <Input type="number" step="0.00001" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} className="h-10 text-sm" placeholder="Optional" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Take Profit</label>
+                  <Input type="number" step="0.00001" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} className="h-9 text-sm" placeholder="Optional" />
                 </div>
               </div>
-
-              {/* Order Value */}
-              <div className="flex justify-between items-center py-4 text-sm border-t border-muted/50 mt-4">
-                <span className="text-muted-foreground font-medium">Required Margin</span>
-                <span className="font-bold text-foreground">
-                  {amountInput && currentPrice ? ((parseFloat(amountInput) * 100000 * currentPrice) / 100).toFixed(2) /* Mock 1:100 leverage */ : '0.00'} USD
-                </span>
+              <div className="flex flex-col gap-1.5 pt-3 border-t border-muted/50">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium text-[10px]">Contract Size</span>
+                  <span className="font-semibold text-foreground text-[10px]">{marketService.getInstrumentDetails(symbol).contractSizeLabel}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium text-[10px]">Position Size (Lots)</span>
+                  <span className="font-bold text-foreground text-[10px]">{amountInput && currentPrice ? ((parseFloat(amountInput || '100') * Number(marketService.getInstrumentDetails(symbol).leverage)) / (Number(marketService.getInstrumentDetails(symbol).contractSize) * currentPrice)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} Lots</span>
+                </div>
               </div>
             </div>
-            
-            {/* Submit Button */}
-            <Button 
-              type="submit" 
-              className={`w-full h-12 mt-6 text-base font-bold shadow-md transition-all ${
-                orderSide === 'BUY' 
-                  ? 'bg-blue-600 hover:bg-blue-500 text-white' 
-                  : 'bg-red-600 hover:bg-red-500 text-white'
-              }`}
-            >
-              {orderSide === 'BUY' ? `Buy ${baseCurrency}` : `Sell ${baseCurrency}`}
-            </Button>
+            <div className="p-3 bg-card border-t shrink-0 flex gap-2">
+              <Button type="button" onClick={(e) => { setOrderSide('SELL'); handleOrder(e, 'SELL'); }}
+                className="flex-1 h-12 flex flex-col items-center justify-center gap-0.5 bg-red-600 hover:bg-red-500 text-white font-bold transition-all shadow-md">
+                <span className="text-sm">Sell {orderType === 'PENDING' ? pendingType : ''}</span>
+                {orderType === 'MARKET' && <span className="text-[10px] font-normal opacity-80">{currentPrice ? (currentPrice - 0.00010).toFixed(5) : '0.00000'}</span>}
+              </Button>
+              <Button type="button" onClick={(e) => { setOrderSide('BUY'); handleOrder(e, 'BUY'); }}
+                className="flex-1 h-12 flex flex-col items-center justify-center gap-0.5 bg-green-600 hover:bg-green-500 text-white font-bold transition-all shadow-md">
+                <span className="text-sm">Buy {orderType === 'PENDING' ? pendingType : ''}</span>
+                {orderType === 'MARKET' && <span className="text-[10px] font-normal opacity-80">{currentPrice ? (currentPrice + 0.00010).toFixed(5) : '0.00000'}</span>}
+              </Button>
+            </div>
           </form>
         </Tabs>
       </div>
@@ -402,18 +328,8 @@ export default function TradingPage() {
                 <div className="h-8 w-0.5 rounded-full bg-muted-foreground/30 group-hover:bg-primary/50 transition-colors" />
               </PanelResizeHandle>
               
-              <Panel defaultSize={25} minSize={20} maxSize={40}>
-                <PanelGroup direction="vertical" autoSaveId="trading-right-col">
-                  <Panel defaultSize={50} minSize={30}>
-                    {OrderBookComponent}
-                  </Panel>
-                  <PanelResizeHandle className="h-1.5 flex flex-row items-center justify-center bg-transparent cursor-row-resize group">
-                    <div className="w-8 h-0.5 rounded-full bg-muted-foreground/30 group-hover:bg-primary/50 transition-colors" />
-                  </PanelResizeHandle>
-                  <Panel defaultSize={50} minSize={30}>
-                    {TradingFormComponent}
-                  </Panel>
-                </PanelGroup>
+              <Panel defaultSize={25} minSize={22} maxSize={35}>
+                {TradingFormComponent}
               </Panel>
             </PanelGroup>
           </Panel>
@@ -430,9 +346,8 @@ export default function TradingPage() {
                   <TabsList className="bg-transparent h-8">
                     <TabsTrigger value="open" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Open Positions</TabsTrigger>
                     <TabsTrigger value="pending" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Pending Orders</TabsTrigger>
-                    <TabsTrigger value="history" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Order History</TabsTrigger>
-                    <TabsTrigger value="trades" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Trade History</TabsTrigger>
-                    <TabsTrigger value="info" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Instrument Info</TabsTrigger>
+                    <TabsTrigger value="closed" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">Closed Orders</TabsTrigger>
+                    <TabsTrigger value="history" className="data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs py-1">History</TabsTrigger>
                   </TabsList>
                 </div>
                 
@@ -470,16 +385,15 @@ export default function TradingPage() {
                 <Table>
                   <TableHeader className="sticky top-0 bg-card">
                     <TableRow className="text-xs">
-                      <TableHead>Symbol</TableHead>
-                      <TableHead>Ticket</TableHead>
-                      <TableHead>Time</TableHead>
+                      <TableHead>Pair</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Volume</TableHead>
+                      <TableHead className="text-right">Lot</TableHead>
                       <TableHead className="text-right">Open Price</TableHead>
-                      <TableHead className="text-right">S/L</TableHead>
-                      <TableHead className="text-right">T/P</TableHead>
-                      <TableHead className="text-right">Swap</TableHead>
-                      <TableHead className="text-right">Profit</TableHead>
+                      <TableHead className="text-right">Current Price</TableHead>
+                      <TableHead className="text-right">SL</TableHead>
+                      <TableHead className="text-right">TP</TableHead>
+                      <TableHead className="text-right">Floating P/L</TableHead>
+                      <TableHead className="text-right">Margin</TableHead>
                       <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -487,25 +401,28 @@ export default function TradingPage() {
                     {openPositionsList.map((o: any) => {
                       const openPrice = parseFloat(o.price || '0');
                       const volume = parseFloat(o.quantity || '0');
+                      const contractSize = Number(marketService.getInstrumentDetails(symbol).contractSize);
+                      const leverage = Number(marketService.getInstrumentDetails(symbol).leverage);
                       let profit = 0;
                       if (openPrice > 0 && currentPrice > 0) {
-                        profit = o.side === 'BUY' ? (currentPrice - openPrice) * volume * 100000 : (openPrice - currentPrice) * volume * 100000;
+                        profit = o.side === 'BUY' ? (currentPrice - openPrice) * volume * contractSize : (openPrice - currentPrice) * volume * contractSize;
                       }
+                      const margin = (openPrice * volume * contractSize) / leverage;
                       
                       return (
                       <TableRow key={o.id} className="text-xs">
-                        <TableCell className="font-medium">{o.tradingPair?.symbol}</TableCell>
-                        <TableCell>#{o.id.substring(0, 8)}</TableCell>
-                        <TableCell suppressHydrationWarning>{new Date(o.createdAt).toLocaleString()}</TableCell>
+                        <TableCell className="font-bold">{o.tradingPair?.symbol}</TableCell>
                         <TableCell className={o.side === 'BUY' ? 'text-green-500 font-medium' : 'text-red-500 font-medium'}>{o.side}</TableCell>
                         <TableCell className="text-right">{volume.toFixed(2)}</TableCell>
                         <TableCell className="text-right">{openPrice.toFixed(5)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{o.metadata?.stopLoss ? parseFloat(o.metadata.stopLoss).toFixed(5) : '0.00000'}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{o.metadata?.takeProfit ? parseFloat(o.metadata.takeProfit).toFixed(5) : '0.00000'}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">0.00</TableCell>
-                        <TableCell className={`text-right font-medium ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{profit >= 0 ? '+' : ''}{profit.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" className="h-6 text-xs px-2 hover:bg-muted" onClick={() => handleCancel(o.id)}>Close</Button>
+                        <TableCell className="text-right font-medium">{currentPrice.toFixed(5)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{o.metadata?.stopLoss ? parseFloat(o.metadata.stopLoss).toFixed(5) : '—'}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{o.metadata?.takeProfit ? parseFloat(o.metadata.takeProfit).toFixed(5) : '—'}</TableCell>
+                        <TableCell className={`text-right font-bold ${profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>{profit >= 0 ? '+' : ''}{profit.toFixed(2)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{margin.toFixed(2)}</TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => alert('Modify not implemented')}>Modify</Button>
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 bg-red-500/10 text-red-500 hover:bg-red-500/20" onClick={() => handleCancel(o.id)}>Close</Button>
                         </TableCell>
                       </TableRow>
                     )})}
@@ -556,9 +473,9 @@ export default function TradingPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="history" className="m-0 h-full">
+            <TabsContent value="closed" className="m-0 h-full">
               {historyOrdersList.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">No order history</div>
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">No closed orders</div>
               ) : (
                 <Table>
                   <TableHeader className="sticky top-0 bg-card">
@@ -589,7 +506,7 @@ export default function TradingPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="trades" className="m-0 h-full">
+            <TabsContent value="history" className="m-0 h-full">
                <Table>
                   <TableHeader className="sticky top-0 bg-card">
                     <TableRow className="text-xs">
@@ -616,56 +533,28 @@ export default function TradingPage() {
                   </TableBody>
                 </Table>
             </TabsContent>
-            
-            <TabsContent value="info" className="m-0 h-full p-6 overflow-auto">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-8 text-sm">
-                <div>
-                  <div className="text-muted-foreground mb-1">Contract Size</div>
-                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).contractSize}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Min Lot Size</div>
-                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).minLot}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Max Lot Size</div>
-                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).maxLot}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Max Leverage</div>
-                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).leverage}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Typical Spread</div>
-                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).spread}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground mb-1">Trading Hours</div>
-                  <div className="font-semibold">{marketService.getInstrumentDetails(symbol).tradingHours}</div>
-                </div>
-              </div>
-            </TabsContent>
           </div>
         </Tabs>
       </div>
       </Panel>
     </PanelGroup>
     ) : (
-        <div className="flex flex-col gap-2 h-full overflow-y-auto">
+      <>
+        <div className="flex flex-col gap-2 h-full overflow-y-auto pb-32">
           <div className="h-[300px] shrink-0">
             <MarketSelector currentSymbol={`${baseCurrency}USDT`} />
           </div>
           <div className="h-[400px] shrink-0">
             {ChartComponent}
           </div>
-          <div className="h-[400px] shrink-0">
-            {OrderBookComponent}
-          </div>
-          <div className="h-[400px] shrink-0">
+        </div>
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-2xl">
+          <div className="h-[50vh] overflow-y-auto">
             {TradingFormComponent}
           </div>
         </div>
-      )}
+      </>
+    )}
     </div>
   );
 }

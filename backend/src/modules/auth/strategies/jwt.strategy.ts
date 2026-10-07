@@ -9,21 +9,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'super_secret_jwt_key',
+      secretOrKey: process.env.JWT_SECRET as string,
     });
   }
 
   async validate(payload: any) {
-    console.log('JWT Payload:', payload);
     try {
       const user = await this.usersService.findById(payload.sub);
-      console.log('Found user:', user?.id);
       if (!user) {
         throw new UnauthorizedException('User not found');
       }
+      if (['SUSPENDED', 'DISABLED', 'BANNED'].includes(user.status)) {
+        throw new UnauthorizedException('Account disabled');
+      }
       return user;
     } catch (err) {
-      console.error('JWT Validate Error:', err);
       throw new UnauthorizedException('Validate failed');
     }
   }

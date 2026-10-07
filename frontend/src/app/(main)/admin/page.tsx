@@ -24,18 +24,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { AdminGuard } from '@/components/admin/AdminGuard';
+import Link from 'next/link';
+
 function StatCard({ title, value, icon: Icon, description }: {
   title: string; value: string | number; icon: React.ElementType; description?: string;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+    <Card className="border-[#222] bg-gradient-to-br from-[#111] to-[#0a0a0a] shadow-xl overflow-hidden group">
+      <div className="absolute inset-0 bg-yellow-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
+        <CardTitle className="text-sm font-medium text-zinc-400">{title}</CardTitle>
+        <div className="w-8 h-8 rounded-lg bg-yellow-500/10 flex items-center justify-center">
+          <Icon className="h-4 w-4 text-yellow-500" />
+        </div>
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
-        {description && <p className="text-xs text-muted-foreground mt-1">{description}</p>}
+      <CardContent className="relative z-10">
+        <div className="text-2xl font-bold text-white">{value}</div>
+        {description && <p className="text-xs text-zinc-500 mt-1">{description}</p>}
       </CardContent>
     </Card>
   );
@@ -50,7 +56,7 @@ function AdminDashboard() {
   if (isLoading) {
     return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+        {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-28" />)}
       </div>
     );
   }
@@ -59,45 +65,82 @@ function AdminDashboard() {
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Total Users" value={stats?.totalUsers || 0} icon={Users} description="Registered accounts" />
+        <StatCard title="Today's Registrations" value={stats?.todayRegistrations || 0} icon={Users} description="Signed up today" />
+        <StatCard title="This Week Registrations" value={stats?.weekRegistrations || 0} icon={Users} description="Signed up in last 7 days" />
+        <StatCard title="Verified Users" value={stats?.verifiedUsers || 0} icon={ShieldCheck} description="Approved KYC" />
+
+        <StatCard title="Pending KYC" value={stats?.pendingKyc || 0} icon={ShieldCheck} description="Documents to review" />
+        <StatCard title="Referral Users" value={stats?.referralUsers || 0} icon={Users} description="Users with referral links" />
         <StatCard title="Active Users" value={stats?.activeUsers || 0} icon={Activity} description="Active accounts" />
+        <StatCard title="Online Users" value={stats?.onlineUsers || 0} icon={Activity} description="Recently active" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard title="Wallet Balances" value={`$${(stats?.totalWalletBalance || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={DollarSign} description="Total across all wallets" />
         <StatCard title="Trading Volume" value={`$${(stats?.tradingVolume || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={Activity} description="Total trade volume" />
-        
         <StatCard title="Deposits Today" value={`$${(stats?.depositsToday || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={ArrowDownToLine} description="24h deposit volume" />
         <StatCard title="Withdrawals Today" value={`$${(stats?.withdrawalsToday || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={ArrowUpFromLine} description="24h withdrawal volume" />
-        <StatCard title="Pending KYC" value={stats?.pendingKyc || 0} icon={ShieldCheck} description="Documents to review" />
-        <StatCard title="Pending Withdrawals" value={stats?.pendingWithdrawals || 0} icon={ArrowUpFromLine} description="Awaiting approval" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="border-[#222] bg-gradient-to-br from-[#111] to-[#0a0a0a] shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-white text-sm font-medium">Platform Growth (30D)</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[200px] flex items-end gap-2 pt-4">
+            {/* Dummy Bar Chart */}
+            {[40, 25, 60, 45, 80, 50, 90, 75, 100, 85, 120, 95].map((h, i) => (
+              <div key={i} className="flex-1 bg-yellow-500/20 hover:bg-yellow-500 transition-colors rounded-t-sm" style={{ height: `${(h / 120) * 100}%` }} />
+            ))}
+          </CardContent>
+        </Card>
+        
+        <Card className="border-[#222] bg-gradient-to-br from-[#111] to-[#0a0a0a] shadow-xl">
+          <CardHeader>
+            <CardTitle className="text-white text-sm font-medium">Deposits vs Withdrawals</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[200px] flex items-end gap-4 pt-4 px-4">
+            {/* Dummy Bar Chart */}
+            {[60, 40, 80, 50, 100, 70, 40, 20].map((h, i) => (
+              <div key={i} className={`flex-1 transition-colors rounded-t-sm ${i % 2 === 0 ? 'bg-emerald-500/50 hover:bg-emerald-500' : 'bg-red-500/50 hover:bg-red-500'}`} style={{ height: `${(h / 100) * 100}%` }} />
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
       {stats?.recentUsers?.length > 0 && (
-        <Card>
+        <Card className="border-[#222] bg-[#111] shadow-xl">
           <CardHeader>
-            <CardTitle>Recent Registrations</CardTitle>
-            <CardDescription>Latest users who signed up</CardDescription>
+            <CardTitle className="text-white">Recent Registrations</CardTitle>
+            <CardDescription className="text-zinc-400">Latest users who signed up</CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stats.recentUsers.map((user: { id: string; email: string; status: string; createdAt: string }) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="font-medium">{user.email}</TableCell>
-                    <TableCell>
-                      <Badge variant={user.status === 'ACTIVE' ? 'default' : 'secondary'}>{user.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground text-sm">
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </TableCell>
+            <div className="rounded-md border border-[#222] overflow-hidden">
+              <Table>
+                <TableHeader className="bg-[#1a1a1a]">
+                  <TableRow className="border-[#222] hover:bg-transparent">
+                    <TableHead className="text-zinc-400">Email</TableHead>
+                    <TableHead className="text-zinc-400">Status</TableHead>
+                    <TableHead className="text-right text-zinc-400">Date</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {stats.recentUsers.map((user: { id: string; email: string; status: string; createdAt: string }) => (
+                    <TableRow key={user.id} className="border-[#222] hover:bg-[#1a1a1a] transition-colors">
+                      <TableCell className="font-medium text-zinc-200">{user.email}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={user.status === 'ACTIVE' ? 'border-emerald-500/50 text-emerald-500 bg-emerald-500/10' : 'border-zinc-500/50 text-zinc-500 bg-zinc-500/10'}>
+                          {user.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-zinc-500 text-sm">
+                        {new Date(user.createdAt).toLocaleDateString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -599,40 +642,62 @@ function AuditLogs() {
   );
 }
 
+import { useSearchParams } from 'next/navigation';
+
+function PlaceholderTab({ title, description }: { title: string, description: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
+          <p>This module is currently under development.</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const searchParams = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'dashboard';
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard': return <AdminDashboard />;
+      case 'deposits': return <DepositApproval />;
+      case 'withdrawals': return <WithdrawalApproval />;
+      case 'kyc': return <KycManagement />;
+      case 'audit': return <AuditLogs />;
+      case 'trading-accounts': return <PlaceholderTab title="Trading Accounts" description="Manage user trading accounts" />;
+      case 'transactions': return <PlaceholderTab title="Transactions" description="View system transactions" />;
+      case 'referral': return <PlaceholderTab title="Referral Program" description="Manage referral networks and commissions" />;
+      case 'wallets': return <PlaceholderTab title="Wallets" description="Manage user wallets and balances" />;
+      case 'analytics': return <PlaceholderTab title="Analytics" description="View platform analytics" />;
+      case 'revenue': return <PlaceholderTab title="Revenue" description="Platform revenue and PnL" />;
+      case 'settings': return <PlaceholderTab title="System Settings" description="Configure platform settings" />;
+      case 'roles': return <PlaceholderTab title="Roles & Permissions" description="Manage admin roles and permissions" />;
+      default: return <AdminDashboard />;
+    }
+  };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Activity className="h-6 w-6" />
-            Admin Panel
-          </h3>
-          <p className="text-muted-foreground">
-            Platform administration and monitoring
-          </p>
-        </div>
+    <div className="max-w-7xl mx-auto animate-in fade-in duration-300">
+      <div className="mb-6 flex flex-col gap-2">
+        <h2 className="text-2xl font-bold tracking-tight text-white capitalize">
+          {activeTab.replace('-', ' ')}
+        </h2>
+        <p className="text-zinc-400">
+          Manage platform {activeTab.replace('-', ' ')} and configurations
+        </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="flex flex-wrap h-auto justify-start mb-4 bg-muted/50">
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="deposits">Deposits</TabsTrigger>
-          <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
-          <TabsTrigger value="kyc">KYC</TabsTrigger>
-          <TabsTrigger value="audit">Audit Logs</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="dashboard"><AdminDashboard /></TabsContent>
-        <TabsContent value="users"><UserManagement /></TabsContent>
-        <TabsContent value="deposits"><DepositApproval /></TabsContent>
-        <TabsContent value="withdrawals"><WithdrawalApproval /></TabsContent>
-        <TabsContent value="kyc"><KycManagement /></TabsContent>
-        <TabsContent value="audit"><AuditLogs /></TabsContent>
-      </Tabs>
+      <div className="w-full">
+        {renderContent()}
+      </div>
     </div>
   );
 }
+

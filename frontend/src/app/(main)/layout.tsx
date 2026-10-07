@@ -16,15 +16,45 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [isTogglingDemo, setIsTogglingDemo] = useState(false);
 
-  const handleToggleDemo = async () => {
+  // Keep the persisted Demo/Live flag and roles in sync with the server (source of truth)
+  useEffect(() => {
+    let cancelled = false;
+    userService.getProfile().then((p) => {
+      const u = useAuthStore.getState().user;
+      if (cancelled || !u) return;
+      const serverRoles: string[] | undefined = Array.isArray(p?.roles) ? p.roles : undefined;
+      const rolesChanged = !!serverRoles && JSON.stringify([...serverRoles].sort()) !== JSON.stringify([...(u.roles || [])].sort());
+      const modeChanged = typeof p?.demoModeEnabled === 'boolean' && p.demoModeEnabled !== u.demoModeEnabled;
+      if (rolesChanged || modeChanged) {
+        updateUser({
+          ...u,
+          ...(rolesChanged ? { roles: serverRoles } : {}),
+          ...(modeChanged ? { demoModeEnabled: p.demoModeEnabled } : {}),
+        });
+        if (modeChanged) queryClient.invalidateQueries();
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSelectMode = async (wantDemo: boolean) => {
+    if (isTogglingDemo) return;
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser || !!currentUser.demoModeEnabled === wantDemo) return;
     setIsTogglingDemo(true);
+    // Optimistic: active state updates instantly
+    updateUser({ ...currentUser, demoModeEnabled: wantDemo });
     try {
       const res = await userService.toggleDemoMode();
-      const currentUser = useAuthStore.getState().user;
-      updateUser({ ...currentUser!, demoModeEnabled: res.demoModeEnabled });
-      queryClient.invalidateQueries();
+      const latest = useAuthStore.getState().user ?? currentUser;
+      updateUser({ ...latest, demoModeEnabled: !!res.demoModeEnabled });
+      await queryClient.invalidateQueries();
     } catch (error) {
       console.error(error);
+      // Roll back on failure
+      const latest = useAuthStore.getState().user ?? currentUser;
+      updateUser({ ...latest, demoModeEnabled: !wantDemo });
     } finally {
       setIsTogglingDemo(false);
     }
@@ -32,15 +62,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'My Accounts', href: '/wallet', icon: Wallet },
     { name: 'Trade Terminal', href: '/trading', icon: ArrowRightLeft },
     { name: 'Market Watch', href: '/markets', icon: Activity },
-    { name: 'Transaction History', href: '/wallet?tab=history', icon: Briefcase },
-    { name: 'Referrals', href: '/referrals', icon: Users },
+    { name: 'My Accounts', href: '/wallet', icon: Wallet },
+    { name: 'Portfolio', href: '/portfolio', icon: Briefcase },
+    { name: 'Referral', href: '/referrals', icon: Users },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
 
-  if (user?.roles?.includes('ADMIN')) {
+  if (user?.roles?.includes('ADMIN') || user?.roles?.includes('SUPER_ADMIN')) {
     navigation.push({ name: 'Admin', href: '/admin', icon: ShieldAlert });
   }
 
@@ -54,6 +84,16 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
     return () => document.body.classList.remove('hide-dev-tools');
   }, [user]);
+
+  const isAdminRoute = pathname.startsWith('/admin');
+
+  if (isAdminRoute) {
+    return (
+      <div className="flex h-screen w-full bg-background relative overflow-hidden">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background relative overflow-hidden">
@@ -121,16 +161,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </h1>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="flex items-center gap-2 mr-2 border p-1.5 rounded-lg bg-card shadow-sm hidden sm:flex">
-              <span className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${!user?.demoModeEnabled ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}>Live</span>
-              <button 
-                onClick={handleToggleDemo}
+            <div className="flex items-center gap-1 mr-2 border p-1 rounded-lg bg-card shadow-sm">
+              <button
+                id="mode-live-btn"
+                type="button"
                 disabled={isTogglingDemo}
-                className={`w-10 h-5 rounded-full relative transition-colors ${user?.demoModeEnabled ? 'bg-yellow-500' : 'bg-muted'}`}
+                onClick={() => handleSelectMode(false)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${!user?.demoModeEnabled ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
               >
-                <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${user?.demoModeEnabled ? 'translate-x-5' : ''}`} />
+                Live
               </button>
-              <span className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${user?.demoModeEnabled ? 'bg-yellow-500 text-black' : 'text-muted-foreground'}`}>Demo</span>
+              <button
+                id="mode-demo-btn"
+                type="button"
+                disabled={isTogglingDemo}
+                onClick={() => handleSelectMode(true)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${user?.demoModeEnabled ? 'bg-yellow-500 text-black' : 'text-muted-foreground hover:bg-muted'}`}
+              >
+                Demo
+              </button>
             </div>
             <ThemeToggle />
             <div className="text-sm text-right hidden sm:block">

@@ -29,18 +29,55 @@ const MOCK_BASE_PRICES: Record<string, number> = {
   'ADAUSD': 0.65,
 };
 
-function generateMockKlines(basePrice: number, limit: number) {
+function parseInterval(interval: string): number {
+  const value = parseInt(interval.slice(0, -1));
+  const unit = interval.slice(-1).toLowerCase();
+  switch (unit) {
+    case 'm': return value * 60 * 1000;
+    case 'h': return value * 60 * 60 * 1000;
+    case 'd': return value * 24 * 60 * 60 * 1000;
+    case 'w': return value * 7 * 24 * 60 * 60 * 1000;
+    default: return 15 * 60 * 1000;
+  }
+}
+
+function xoshiro128ss(a: number, b: number, c: number, d: number) {
+  return function() {
+    let t = b << 9;
+    let r = a * 5; r = (r << 7 | r >>> 25) * 9;
+    c ^= a; d ^= b;
+    b ^= c; a ^= d; c ^= t;
+    d = d << 11 | d >>> 21;
+    return (r >>> 0) / 4294967296;
+  }
+}
+
+function generateMockKlines(symbol: string, basePrice: number, interval: string, limit: number) {
   const klines = [];
-  let currentPrice = basePrice;
-  let time = Date.now() - limit * 15 * 60 * 1000; // 15m intervals
+  const intervalMs = parseInterval(interval);
+  
+  const currentIntervalTime = Math.floor(Date.now() / intervalMs) * intervalMs;
+  let time = currentIntervalTime - ((limit - 1) * intervalMs);
 
   for (let i = 0; i < limit; i++) {
-    const volatility = basePrice * 0.001;
-    const open = currentPrice;
-    const close = currentPrice + (Math.random() - 0.5) * volatility;
-    const high = Math.max(open, close) + Math.random() * volatility;
-    const low = Math.min(open, close) - Math.random() * volatility;
-    const volume = Math.random() * 1000 + 100;
+    const seed = time + basePrice + intervalMs;
+    // Basic hash of seed + symbol string for deterministic RNG
+    let hash = 0;
+    for (let j = 0; j < symbol.length; j++) hash = Math.imul(31, hash) + symbol.charCodeAt(j) | 0;
+    const rng = xoshiro128ss(seed ^ hash, seed ^ (hash << 1), seed ^ (hash >> 1), seed);
+    
+    const volatility = basePrice * 0.0005 * Math.max(1, intervalMs / (60 * 1000));
+    
+    // Deterministic price drift based on previous candles wasn't strictly possible without a full history simulation, 
+    // but we can anchor the open price to the deterministic "currentPrice" walk if we generate from epoch, 
+    // or we just anchor it to basePrice + deterministic offset.
+    // For simplicity, anchor to basePrice.
+    const openOffset = (rng() - 0.5) * volatility * 2;
+    const open = basePrice + openOffset;
+    const close = open + (rng() - 0.5) * volatility;
+    const high = Math.max(open, close) + rng() * volatility;
+    const low = Math.min(open, close) - rng() * volatility;
+    const volume = rng() * 1000 + 100;
 
     klines.push({
       time,
@@ -51,8 +88,7 @@ function generateMockKlines(basePrice: number, limit: number) {
       volume
     });
 
-    currentPrice = close;
-    time += 15 * 60 * 1000;
+    time += intervalMs;
   }
   return klines;
 }
@@ -77,6 +113,8 @@ function generateMockOrderBook(basePrice: number) {
 }
 
 export class MockForexProvider implements IMarketProvider {
+  private lastPrices: Record<string, number> = {};
+
   async getLiveMarkets(symbols: string[]): Promise<MarketData[]> {
     return symbols.map(symbol => this.generateSingleMarket(symbol)).filter(Boolean) as MarketData[];
   }
@@ -112,17 +150,26 @@ export class MockForexProvider implements IMarketProvider {
   async getKlines(symbol: string, interval: string = '15m', limit: number = 100) {
     const pair = symbol.toUpperCase();
     const basePrice = MOCK_BASE_PRICES[pair] || 100;
-    return generateMockKlines(basePrice, limit);
+    return generateMockKlines(symbol, basePrice, interval, limit);
   }
 
   private generateSingleMarket(symbol: string): MarketData | null {
     const basePrice = MOCK_BASE_PRICES[symbol];
     if (!basePrice) return null;
 
-    const change24h = (Math.random() - 0.5) * 2; // -1% to 1%
-    const currentPrice = basePrice * (1 + change24h / 100);
-    const high24h = Math.max(basePrice, currentPrice) * (1 + Math.random() * 0.005);
-    const low24h = Math.min(basePrice, currentPrice) * (1 - Math.random() * 0.005);
+    let currentPrice = this.lastPrices[symbol];
+    if (!currentPrice) {
+      currentPrice = basePrice;
+    } else {
+      // Very small random walk (max 0.05% per tick)
+      const walk = (Math.random() - 0.5) * (basePrice * 0.001);
+      currentPrice = currentPrice + walk;
+    }
+    this.lastPrices[symbol] = currentPrice;
+
+    const change24h = ((currentPrice - basePrice) / basePrice) * 100;
+    const high24h = Math.max(basePrice, currentPrice) * (1 + Math.random() * 0.002);
+    const low24h = Math.min(basePrice, currentPrice) * (1 - Math.random() * 0.002);
     const volume24h = Math.random() * 1000000 + 50000;
 
     const coinDef = SUPPORTED_COINS.find(c => c.symbol === symbol);

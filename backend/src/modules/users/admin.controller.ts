@@ -1,11 +1,16 @@
-import { Controller, Get, Patch, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Query, Body, UseGuards, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PrismaService } from '../../core/prisma/prisma.service';
 
+// Only ADMIN (and SUPER_ADMIN, which RolesGuard always allows) may use these endpoints.
 @ApiTags('Admin')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('ADMIN')
 @Controller('admin')
 export class AdminController {
   constructor(private readonly prisma: PrismaService) {}
@@ -15,6 +20,9 @@ export class AdminController {
   async getDashboardStats() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - 6); // rolling 7 days incl. today
+    const onlineSince = new Date(Date.now() - 15 * 60 * 1000); // access token lifetime
 
     const [
       totalUsers,
@@ -28,6 +36,11 @@ export class AdminController {
       withdrawalsToday,
       tradingVolume,
       walletBalances,
+      todayRegistrations,
+      weekRegistrations,
+      verifiedUsers,
+      referralUsers,
+      onlineUsersRows,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.user.count({ where: { status: 'ACTIVE' } }),
@@ -40,6 +53,14 @@ export class AdminController {
       this.prisma.withdrawal.aggregate({ _sum: { amount: true }, where: { createdAt: { gte: today }, status: 'APPROVED' } }),
       this.prisma.trade.aggregate({ _sum: { total: true } }),
       this.prisma.wallet.aggregate({ _sum: { balance: true } }), // Simplified sum across all wallets
+      this.prisma.user.count({ where: { createdAt: { gte: today } } }),
+      this.prisma.user.count({ where: { createdAt: { gte: weekStart } } }),
+      this.prisma.profile.count({ where: { kycStatus: 'APPROVED' } }),
+      this.prisma.referral.count(),
+      this.prisma.loginHistory.groupBy({
+        by: ['userId'],
+        where: { isSuccess: true, createdAt: { gte: onlineSince } },
+      }),
     ]);
 
     const recentUsers = await this.prisma.user.findMany({
@@ -51,6 +72,11 @@ export class AdminController {
     return {
       totalUsers,
       activeUsers,
+      todayRegistrations,
+      weekRegistrations,
+      verifiedUsers,
+      referralUsers,
+      onlineUsers: onlineUsersRows.length,
       pendingDeposits,
       pendingWithdrawals,
       pendingKyc,
@@ -70,14 +96,22 @@ export class AdminController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('status') status?: string,
   ) {
-    const pageNum = page ? parseInt(page) : 1;
-    const limitNum = limit ? parseInt(limit) : 20;
+    const pageNum = Math.max(1, page ? parseInt(page) || 1 : 1);
+    const limitNum = Math.min(100, Math.max(1, limit ? parseInt(limit) || 20 : 20));
     const skip = (pageNum - 1) * limitNum;
 
-    const where = search
-      ? { email: { contains: search, mode: 'insensitive' as const } }
-      : {};
+    const where: any = {};
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { referralCode: { contains: search, mode: 'insensitive' } },
+        { profile: { is: { firstName: { contains: search, mode: 'insensitive' } } } },
+        { profile: { is: { lastName: { contains: search, mode: 'insensitive' } } } },
+      ];
+    }
+    if (status) where.status = status;
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -93,12 +127,16 @@ export class AdminController {
           demoModeEnabled: true,
           emailVerified: true,
           twoFactorEnabled: true,
+          referralCode: true,
           createdAt: true,
           profile: {
             select: { firstName: true, lastName: true, kycStatus: true },
           },
           roles: {
             include: { role: true },
+          },
+          referredBy: {
+            select: { referrer: { select: { id: true, email: true, referralCode: true } } },
           },
           _count: {
             select: { wallets: true, deposits: true, withdrawals: true },
@@ -108,16 +146,30 @@ export class AdminController {
       this.prisma.user.count({ where }),
     ]);
 
+    // Last successful login per user (single grouped query for the page).
+    const lastLogins = users.length
+      ? await this.prisma.loginHistory.groupBy({
+          by: ['userId'],
+          where: { userId: { in: users.map((u) => u.id) }, isSuccess: true },
+          _max: { createdAt: true },
+        })
+      : [];
+    const lastLoginMap = new Map(lastLogins.map((l) => [l.userId, l._max.createdAt]));
+
     return {
-      data: users,
+      data: users.map((u) => ({
+        ...u,
+        referredByUser: u.referredBy?.referrer ?? null,
+        lastLoginAt: lastLoginMap.get(u.id) ?? null,
+      })),
       meta: { total, page: pageNum, limit: limitNum, totalPages: Math.ceil(total / limitNum) },
     };
   }
 
   @Get('users/:id')
-  @ApiOperation({ summary: 'Admin: Get user details' })
+  @ApiOperation({ summary: 'Admin: Get user details (read-only overview)' })
   async getUserById(@Param('id') id: string) {
-    return this.prisma.user.findUnique({
+    const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -126,14 +178,109 @@ export class AdminController {
         status: true,
         emailVerified: true,
         twoFactorEnabled: true,
+        demoModeEnabled: true,
+        referralCode: true,
         createdAt: true,
         profile: true,
         roles: { include: { role: true } },
         wallets: true,
-        deposits: { orderBy: { createdAt: 'desc' }, take: 10 },
-        withdrawals: { orderBy: { createdAt: 'desc' }, take: 10 },
+        deposits: { orderBy: { createdAt: 'desc' }, take: 20 },
+        withdrawals: { orderBy: { createdAt: 'desc' }, take: 20 },
+        kycDocuments: { orderBy: { createdAt: 'desc' }, select: { id: true, documentType: true, status: true, createdAt: true } },
+        tradingAccounts: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true, accountNumber: true, type: true, accountClass: true, name: true, server: true,
+            leverage: true, currency: true, balance: true, equity: true, freeMargin: true,
+            isActive: true, isArchived: true, createdAt: true,
+          },
+        },
+        referredBy: {
+          select: { status: true, createdAt: true, referrer: { select: { id: true, email: true, referralCode: true } } },
+        },
+        referralsMade: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true, status: true, rewardAmount: true, createdAt: true,
+            referred: { select: { id: true, email: true } },
+          },
+        },
       },
     });
+    if (!user) throw new NotFoundException('User not found');
+
+    const accountIds = user.tradingAccounts.map((a) => a.id);
+    const [lastLogin, positions, openPositions, orderCount] = await Promise.all([
+      this.prisma.loginHistory.findFirst({
+        where: { userId: id, isSuccess: true },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
+      accountIds.length
+        ? this.prisma.position.findMany({
+            where: { tradingAccountId: { in: accountIds } },
+            select: { status: true, profit: true, volume: true },
+          })
+        : Promise.resolve([]),
+      accountIds.length
+        ? this.prisma.position.count({ where: { tradingAccountId: { in: accountIds }, status: 'OPEN' } })
+        : Promise.resolve(0),
+      accountIds.length ? this.prisma.order.count({ where: { tradingAccountId: { in: accountIds } } }) : Promise.resolve(0),
+    ]);
+
+    const closed = positions.filter((p) => p.status !== 'OPEN');
+    const wins = closed.filter((p) => Number(p.profit) > 0).length;
+    const tradingStats = {
+      totalOrders: orderCount,
+      totalPositions: positions.length,
+      openPositions,
+      closedPositions: closed.length,
+      totalVolume: positions.reduce((a, p) => a + Number(p.volume), 0),
+      realizedProfit: closed.reduce((a, p) => a + Number(p.profit), 0),
+      winRate: closed.length ? (wins / closed.length) * 100 : 0,
+    };
+
+    return {
+      ...user,
+      referredByUser: user.referredBy?.referrer ?? null,
+      lastLoginAt: lastLogin?.createdAt ?? null,
+      tradingStats,
+    };
+  }
+
+  @Patch('users/:id/disable')
+  @ApiOperation({ summary: 'Admin: Disable a user account (blocks login and API access)' })
+  async disableUser(@Param('id') targetId: string, @CurrentUser() admin: { id: string }) {
+    return this.setUserStatus(targetId, admin.id, 'SUSPENDED', 'DISABLE_USER');
+  }
+
+  @Patch('users/:id/enable')
+  @ApiOperation({ summary: 'Admin: Re-enable a user account' })
+  async enableUser(@Param('id') targetId: string, @CurrentUser() admin: { id: string }) {
+    return this.setUserStatus(targetId, admin.id, 'ACTIVE', 'ENABLE_USER');
+  }
+
+  private async setUserStatus(targetId: string, adminId: string, status: string, action: string) {
+    if (targetId === adminId) throw new BadRequestException('You cannot change your own account status');
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, roles: { include: { role: true } } },
+    });
+    if (!target) throw new NotFoundException('User not found');
+    if (status !== 'ACTIVE' && target.roles.some((r) => ['ADMIN', 'SUPER_ADMIN'].includes(r.role.name))) {
+      throw new BadRequestException('Administrator accounts cannot be disabled');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetId },
+      data: { status },
+      select: { id: true, email: true, status: true },
+    });
+    await this.prisma.auditLog.create({
+      data: { action, entityType: 'USER', entityId: targetId, userId: adminId },
+    });
+    return updated;
   }
 
   @Get('audit-logs')
@@ -346,4 +493,48 @@ export class AdminController {
     
     return { message: 'Password reset successfully' };
   }
+
+  @Patch('users/:id/promote')
+  @ApiOperation({ summary: 'Admin: Grant the ADMIN role to a user' })
+  async promoteToAdmin(@Param('id') targetId: string, @CurrentUser() admin: { id: string }) {
+    const target = await this.prisma.user.findUnique({ where: { id: targetId }, select: { id: true } });
+    if (!target) throw new NotFoundException('User not found');
+    const role = await this.prisma.role.upsert({
+      where: { name: 'ADMIN' },
+      update: {},
+      create: { name: 'ADMIN', description: 'Platform Administrator' },
+    });
+    await this.prisma.userRole.upsert({
+      where: { userId_roleId: { userId: targetId, roleId: role.id } },
+      update: {},
+      create: { userId: targetId, roleId: role.id },
+    });
+    await this.prisma.auditLog.create({
+      data: { action: 'PROMOTE_ADMIN', entityType: 'USER', entityId: targetId, userId: admin.id },
+    });
+    return { id: targetId, isAdmin: true, message: 'User promoted to admin' };
+  }
+
+  @Patch('users/:id/demote')
+  @ApiOperation({ summary: 'Admin: Remove the ADMIN role from a user' })
+  async removeAdmin(@Param('id') targetId: string, @CurrentUser() admin: { id: string }) {
+    if (targetId === admin.id) throw new BadRequestException('You cannot remove your own admin role');
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetId },
+      select: { id: true, roles: { include: { role: true } } },
+    });
+    if (!target) throw new NotFoundException('User not found');
+    if (target.roles.some((r) => r.role.name === 'SUPER_ADMIN')) {
+      throw new BadRequestException('Super administrators cannot be demoted');
+    }
+    const role = await this.prisma.role.findUnique({ where: { name: 'ADMIN' } });
+    if (role) {
+      await this.prisma.userRole.deleteMany({ where: { userId: targetId, roleId: role.id } });
+    }
+    await this.prisma.auditLog.create({
+      data: { action: 'REMOVE_ADMIN', entityType: 'USER', entityId: targetId, userId: admin.id },
+    });
+    return { id: targetId, isAdmin: false, message: 'Admin role removed' };
+  }
+
 }

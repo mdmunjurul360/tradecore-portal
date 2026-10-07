@@ -200,13 +200,13 @@ export class WalletLedgerService {
         },
       });
 
-      if (!wallet && walletType === 'DEMO') {
+      if (!wallet) {
         wallet = await tx.wallet.create({
           data: {
             userId: params.userId,
             currency: params.currency.toUpperCase(),
-            type: 'DEMO',
-            balance: params.currency.toUpperCase() === 'USD' || params.currency.toUpperCase() === 'USDT' ? 10000 : 0,
+            type: walletType,
+            balance: walletType === 'DEMO' && (params.currency.toUpperCase() === 'USD' || params.currency.toUpperCase() === 'USDT') ? 10000 : 0,
             lockedBalance: 0,
           }
         });

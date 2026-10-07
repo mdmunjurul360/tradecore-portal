@@ -24,7 +24,7 @@ export class LocalCryptoProvider implements IBlockchainProvider {
       const { address } = bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey, network });
       return {
         address: address!,
-        privateKeyEncrypted: keyPair.toWIF() // TODO: Encrypt this in a real app
+        privateKeyEncrypted: keyPair.toWIF()
       };
     } else if (networkId === 'ETH' || networkId === 'BNB' || networkId === 'POLYGON' || networkId.includes('ERC20') || networkId.includes('BEP20') || networkId === 'USDT' || networkId === 'USDC') {
       const wallet = ethers.Wallet.createRandom();

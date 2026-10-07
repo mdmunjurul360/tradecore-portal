@@ -16,13 +16,16 @@ export function MarketSelector({ currentSymbol }: { currentSymbol: string }) {
   // Load state from local storage on mount
   useEffect(() => {
     const savedTab = localStorage.getItem('market_selector_tab');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (savedTab) setActiveTab(savedTab);
     
     const savedFavs = localStorage.getItem('market_favorites');
     if (savedFavs) {
       try {
         setFavorites(JSON.parse(savedFavs));
-      } catch (e) {}
+      } catch (_) {
+        // ignore
+      }
     }
   }, []);
 

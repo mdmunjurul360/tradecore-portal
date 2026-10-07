@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { walletService } from '@/services/wallet.service';
@@ -32,7 +32,8 @@ type AccountFilter = 'real' | 'demo' | 'archived';
 export default function WalletPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { updateUser } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
+  const isDemoMode = !!user?.demoModeEnabled;
   const [activeTab, setActiveTab] = useState('accounts');
   const [filter, setFilter] = useState<AccountFilter>('real');
   const [notice, setNotice] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -54,6 +55,24 @@ export default function WalletPage() {
     queryFn: accountsService.list,
   });
 
+  // Never leave the active mode without an account: auto-create one if missing
+  const autoCreateTried = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (isLoadingAccounts) return;
+    const wantType = isDemoMode ? 'DEMO' : 'LIVE';
+    if (accounts.some((a) => a.type === wantType && !a.isArchived)) {
+      autoCreateTried.current.delete(wantType);
+      return;
+    }
+    if (autoCreateTried.current.has(wantType)) return;
+    autoCreateTried.current.add(wantType);
+    accountsService
+      .create({ type: wantType, accountClass: 'STANDARD', leverage: 2000 })
+      .catch(() => {})
+      .finally(() => queryClient.invalidateQueries({ queryKey: ['trading-accounts'] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoadingAccounts, isDemoMode, accounts]);
+
   const { data: txData, isLoading: isLoadingTx } = useQuery({
     queryKey: ['transactions'],
     queryFn: () => walletService.getTransactions({ limit: 20 }),
@@ -67,11 +86,10 @@ export default function WalletPage() {
     return accounts.filter((a) => !a.isArchived && (filter === 'demo' ? a.type === 'DEMO' : a.type === 'LIVE'));
   }, [accounts, filter]);
 
-  // Follow the active account's type in the filter once loaded
+  // Follow the active account's type in the filter
   useEffect(() => {
-    if (current) setFilter((f) => (f === 'archived' ? f : current.type === 'DEMO' ? 'demo' : 'real'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id]);
+    setFilter(f => f === 'archived' ? f : (isDemoMode ? 'demo' : 'real'));
+  }, [isDemoMode]);
 
   const flash = (kind: 'ok' | 'err', text: string) => {
     setNotice({ kind, text });
@@ -86,7 +104,7 @@ export default function WalletPage() {
     mutationFn: (id: string) => accountsService.switch(id),
     onSuccess: async (res: any) => {
       const u = useAuthStore.getState().user;
-      if (u) updateUser({ ...u, demoModeEnabled: res.type === 'DEMO' });
+      if (u) updateUser({ ...u, demoModeEnabled: !!res.demoModeEnabled });
       await refreshAll();
     },
   });
@@ -170,22 +188,7 @@ export default function WalletPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              <AccountSection 
-                title="Live Accounts" 
-                accounts={accounts.filter((a) => a.type === 'LIVE' && !a.isArchived)}
-                busyId={switchMutation.isPending ? switchMutation.variables : null}
-                onSwitch={(acc) => withActive(acc, () => {})}
-                onTrade={(acc) => withActive(acc, () => router.push('/trading'))}
-                onDeposit={(acc) => goToFunding(acc, 'deposit')}
-                onWithdraw={(acc) => goToFunding(acc, 'withdraw')}
-                onTransfer={(acc) => { setTransferFrom(acc); setActiveTab('transfer'); }}
-                onDetails={(acc) => setDetailsTarget(acc)}
-                onRename={(acc) => setRenameTarget(acc)}
-                onArchive={(acc) => {
-                  if (confirm(`Archive account #${acc.accountNumber}?`)) archiveMutation.mutate(acc);
-                }}
-              />
-              
+              {isDemoMode ? (
               <AccountSection 
                 title="Demo Accounts" 
                 accounts={accounts.filter((a) => a.type === 'DEMO' && !a.isArchived)}
@@ -201,6 +204,23 @@ export default function WalletPage() {
                   if (confirm(`Archive account #${acc.accountNumber}?`)) archiveMutation.mutate(acc);
                 }}
               />
+              ) : (
+              <AccountSection 
+                title="Live Accounts" 
+                accounts={accounts.filter((a) => a.type === 'LIVE' && !a.isArchived)}
+                busyId={switchMutation.isPending ? switchMutation.variables : null}
+                onSwitch={(acc) => withActive(acc, () => {})}
+                onTrade={(acc) => withActive(acc, () => router.push('/trading'))}
+                onDeposit={(acc) => goToFunding(acc, 'deposit')}
+                onWithdraw={(acc) => goToFunding(acc, 'withdraw')}
+                onTransfer={(acc) => { setTransferFrom(acc); setActiveTab('transfer'); }}
+                onDetails={(acc) => setDetailsTarget(acc)}
+                onRename={(acc) => setRenameTarget(acc)}
+                onArchive={(acc) => {
+                  if (confirm(`Archive account #${acc.accountNumber}?`)) archiveMutation.mutate(acc);
+                }}
+              />
+              )}
 
               {accounts.some((a) => a.isArchived) && (
                 <AccountSection 
@@ -652,14 +672,14 @@ function AccountTransferPanel({ accounts, initialFrom, onDone }: { accounts: Tra
   useEffect(() => {
     if (initialFrom) setFromId(initialFrom.id);
     else if (!fromId && accounts[0]) setFromId(accounts[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [initialFrom?.id, accounts.length]);
 
   const from = accounts.find((a) => a.id === fromId);
   const targets = accounts.filter((a) => a.id !== fromId && from && a.type === from.type);
   useEffect(() => {
     if (!targets.find((t) => t.id === toId)) setToId(targets[0]?.id || '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [fromId, targets.length]);
 
   const available = from ? from.freeMargin : 0;

@@ -97,6 +97,10 @@
   }
 }
 
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dev-tools-button],
+.ts-react-query-devtools,
 body.hide-dev-tools nextjs-portal,
 body.hide-dev-tools [data-nextjs-toast],
 body.hide-dev-tools .ts-react-query-devtools {

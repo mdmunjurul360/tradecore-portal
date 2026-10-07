@@ -21,6 +21,26 @@ export class OrderService {
     private readonly matchingEngineService: MatchingEngineService,
   ) {}
 
+  private getInstrumentDetails(symbol: string) {
+    const isCrypto = ['BTCUSD', 'ETHUSD', 'BNBUSD', 'SOLUSD', 'ADAUSD'].includes(symbol);
+    const isIndex = ['US30', 'NAS100', 'SPX500', 'GER40', 'UK100'].includes(symbol);
+    const isEnergy = ['UKOIL', 'USOIL', 'NGAS'].includes(symbol);
+    const isGold = symbol === 'XAUUSD';
+    const isSilver = symbol === 'XAGUSD';
+    
+    let contractSize = 100000;
+    if (isCrypto) contractSize = 1;
+    else if (isIndex) contractSize = 10;
+    else if (isEnergy) contractSize = 100;
+    else if (isGold) contractSize = 100;
+    else if (isSilver) contractSize = 5000;
+
+    return {
+      contractSize,
+      leverage: isCrypto ? 50 : isIndex ? 200 : 2000,
+    };
+  }
+
   async create(userId: string, dto: CreateOrderDto, isDemoMode = false) {
     const order = await this.prisma.$transaction(async (tx) => {
       // 1. Validate trading pair exists and is active
@@ -67,11 +87,13 @@ export class OrderService {
         if (dto.price === undefined || dto.price === null) {
           throw new BadRequestException('Estimated price is required for CFD orders');
         }
-        const marginRequired = quantity.mul(new Prisma.Decimal(dto.price)).div(100); // 1:100 Leverage
+        const { contractSize, leverage } = this.getInstrumentDetails(tradingPair.symbol);
+        const marginRequired = quantity.mul(new Prisma.Decimal(dto.price)).mul(contractSize).div(leverage);
+        
         await this.walletLedgerService.lockWalletFunds(
           {
             userId,
-            currency: tradingPair.quoteAsset,
+            currency: 'USD', // CFD margin is always USD in this app
             amount: marginRequired,
           },
           tx,
@@ -85,7 +107,7 @@ export class OrderService {
           await this.walletLedgerService.lockWalletFunds(
             {
               userId,
-              currency: tradingPair.quoteAsset,
+              currency: 'USD',
               amount: totalQuoteCost,
             },
             tx,
@@ -138,6 +160,7 @@ export class OrderService {
 
       if (!isDemoMode && dto.isCfd) {
         const referral = await tx.referral.findFirst({
+
           where: { referredId: userId }
         });
         if (referral) {
@@ -347,11 +370,12 @@ export class OrderService {
       if (metadata.isCfd) {
         // Unlock CFD Margin
         if (remainingQty.gt(0) && order.price) {
-          const marginRequired = remainingQty.mul(order.price).div(100);
+          const { contractSize, leverage } = this.getInstrumentDetails(order.tradingPair.symbol);
+          const marginRequired = remainingQty.mul(order.price).mul(contractSize).div(leverage);
           await this.walletLedgerService.unlockWalletFunds(
             {
               userId,
-              currency: order.tradingPair.quoteAsset,
+              currency: 'USD',
               amount: marginRequired,
             },
             tx,
@@ -363,23 +387,24 @@ export class OrderService {
           const openPrice = order.price;
           const closePrice = new Prisma.Decimal(currentPrice);
           let profit = new Prisma.Decimal(0);
+          const { contractSize } = this.getInstrumentDetails(order.tradingPair.symbol);
           
           if (order.side === 'BUY') {
-            profit = closePrice.minus(openPrice).mul(remainingQty).mul(100000);
+            profit = closePrice.minus(openPrice).mul(remainingQty).mul(contractSize);
           } else {
-            profit = openPrice.minus(closePrice).mul(remainingQty).mul(100000);
+            profit = openPrice.minus(closePrice).mul(remainingQty).mul(contractSize);
           }
 
           if (!profit.equals(0)) {
             const wallet = await tx.wallet.findFirst({
-              where: { userId, currency: order.tradingPair.quoteAsset, type: isDemoMode ? 'DEMO' : 'REAL' }
+              where: { userId, currency: 'USD', type: isDemoMode ? 'DEMO' : 'REAL' }
             });
             
             if (wallet) {
               await this.walletLedgerService.executeAtomicWalletTransaction({
                 walletId: wallet.id,
                 amount: profit.abs(),
-                currency: order.tradingPair.quoteAsset,
+                currency: 'USD',
                 type: profit.gt(0) ? 'DEPOSIT' : 'WITHDRAWAL',
                 reference: `PNL-${order.id}-${Date.now()}`,
                 description: `PnL Settlement for ${order.tradingPair.symbol}`,

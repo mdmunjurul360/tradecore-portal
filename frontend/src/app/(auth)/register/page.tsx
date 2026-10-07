@@ -4,9 +4,10 @@ import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/services/auth.service';
+import { referralService } from '@/services/referral.service';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -36,12 +37,22 @@ function RegisterForm() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       referralCode: refCode,
     }
+  });
+
+  const enteredCode = (watch('referralCode') || '').trim();
+  const { data: refCheck, isFetching: isCheckingRef } = useQuery({
+    queryKey: ['referral-validate', enteredCode],
+    queryFn: () => referralService.validateCode(enteredCode),
+    enabled: enteredCode.length >= 4,
+    staleTime: 60_000,
+    retry: false,
   });
 
   const mutation = useMutation({
@@ -122,6 +133,13 @@ function RegisterForm() {
               placeholder="Enter referral code if you have one"
               {...register('referralCode')}
             />
+            {enteredCode.length >= 4 && !isCheckingRef && refCheck && (
+              refCheck.valid ? (
+                <p id="referral-valid" className="text-sm text-green-600">✓ Valid code — you were invited by {refCheck.referrer}</p>
+              ) : (
+                <p id="referral-invalid" className="text-sm text-amber-600">This referral code was not recognised. You can still register without it.</p>
+              )
+            )}
           </div>
 
           <Button type="submit" className="w-full" disabled={mutation.isPending}>
