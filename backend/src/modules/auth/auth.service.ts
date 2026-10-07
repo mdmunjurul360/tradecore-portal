@@ -149,7 +149,7 @@ export class AuthService {
 
     const tokens = this.generateTokens(user.id, user.email);
     const rolesArr = user.roles?.map(r => r.role?.name) || [];
-    if (user.email === 'islammunjurul468@gmail.com' && !rolesArr.includes('SUPER_ADMIN')) {
+    if (process.env.SUPER_ADMIN_EMAIL && user.email === process.env.SUPER_ADMIN_EMAIL && !rolesArr.includes('SUPER_ADMIN')) {
       rolesArr.push('SUPER_ADMIN');
     }
 

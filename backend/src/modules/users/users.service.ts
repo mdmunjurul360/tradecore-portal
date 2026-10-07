@@ -39,7 +39,7 @@ export class UsersService {
     delete (user as any).passwordHash;
     const { roles, ...rest } = user as any;
     const rolesArr = (roles || []).map((r: any) => r.role?.name).filter(Boolean);
-    if (user.email === 'islammunjurul468@gmail.com' && !rolesArr.includes('SUPER_ADMIN')) {
+    if (process.env.SUPER_ADMIN_EMAIL && user.email === process.env.SUPER_ADMIN_EMAIL && !rolesArr.includes('SUPER_ADMIN')) {
       rolesArr.push('SUPER_ADMIN');
     }
     return { ...rest, roles: rolesArr };
