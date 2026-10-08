@@ -14,3 +14,7 @@ verify_db.js
 check_*.js
 fix_*.js
 *.log
+
+# Next.js auto-generated agent files
+frontend/AGENTS.md
+frontend/CLAUDE.md
