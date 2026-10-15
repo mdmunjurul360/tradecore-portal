@@ -44,7 +44,7 @@ Not a real broker. No real money, no real market execution.
 - Admin panel UI (users, KYC, deposits, withdrawals)
 - Auth module (register / login JWT on API)
 - Wallet, ledger, deposit & withdrawal flows (API modules)
-- File upload foundation for KYC / proofs
+- File upload foundation for KYC / proofs 
 
 ## Project structure
 
